@@ -12,6 +12,7 @@ Install the following dependencies:
 sudo apt-get install ros-"${ROS_DISTRO}"-gazebo-ros-pkgs ros-"${ROS_DISTRO}"-mavros-msgs ros-"${ROS_DISTRO}"-tf2-sensor-msgs
 ```
 ```
+sudo apt-get install python3-catkin-tools
 python -m pip install pyquaternion
 sudo apt install git
 
