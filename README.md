@@ -2,7 +2,8 @@
 
 Link to draw.io file:   https://app.diagrams.net/#G1JaMom59_h-Wq3BAk28IzTx_z-1hYDaKI
 
-## Set up the workspace
+## Set up the workspacen 
+(We may modify the way we maintain alll the packages using rosinstall later, rosinstall essentially allows you to have packages developed seperately in different git repos (say, Matt develops a package in his github repo, you develop in another, rosinstall merges all the repos to create a ros workspace cloning the right version of the repos that now become dependencies for the project.-- The example below is how it works, the gazebo_drone.rosinstall essentially allows you to clone the mit repo for the entire gazebo and drone package)
 
 This has been tested with Ubuntu 18.04/ROS Melodic
 
@@ -12,14 +13,41 @@ sudo apt-get install ros-"${ROS_DISTRO}"-gazebo-ros-pkgs ros-"${ROS_DISTRO}"-mav
 ```
 ```
 python -m pip install pyquaternion
+sudo apt install git
+
 ```
 Create a workspace, and clone this repo and its dependencies:
 ```
 mkdir project_ws && cd project_ws && mkdir src
 git clone https://github.com/sangitasahu/AER1516.git
+```
+NOTE: if you get a prompt to enter username and password, 
+## Create Personal Access Token on GitHub
+From your GitHub account, go to Settings => Developer Settings => Personal Access Token => Generate New Token (Give your password) => Fillup the form (tick only repo Full control of private repositories ) => click Generate token => Copy the generated Token, it will be something like ghp_sFhFsSHhTzMDreGRLjmks4Tzuzgthdvfsrta
+
+For Linux, you need to configure the local GIT client with a username and email address,
+'''
+git config --global user.name "your_github_username"
+git config --global user.email "your_github_email"
+git config -l
+'''
+Once GIT is configured, we can begin using it to access GitHub. Example:
+'''
+git clone https://github.com/YOUR-USERNAME/YOUR-REPOSITORY <<<<<  Here give our repo! 
+> Cloning into `Spoon-Knife`...
+>$ Username for 'https://github.com' : username
+> $ Password for 'https://github.com' : give your personal access token here
+'''
+Now cache the given record in your computer to remembers the token:
+'''
+git config --global credential.helper cache
+'''
+
+Now initialize the workspace
+'''
 wstool init src
 wstool merge -t src ~/project_ws/AER1516/gazebo_drone.rosinstall
-```
+'''
 
 ## Compile the code:
 ```
