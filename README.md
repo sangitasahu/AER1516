@@ -2,7 +2,7 @@
 
 Link to draw.io file:   https://app.diagrams.net/#G1JaMom59_h-Wq3BAk28IzTx_z-1hYDaKI
 
-## Set up the workspacen 
+## Set up the workspace
 (We may modify the way we maintain alll the packages using rosinstall later, rosinstall essentially allows you to have packages developed seperately in different git repos (say, Matt develops a package in his github repo, you develop in another, rosinstall merges all the repos to create a ros workspace cloning the right version of the repos that now become dependencies for the project.-- The example below is how it works, the gazebo_drone.rosinstall essentially allows you to clone the mit repo for the entire gazebo and drone package)
 
 This has been tested with Ubuntu 18.04/ROS Melodic
