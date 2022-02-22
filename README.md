@@ -15,7 +15,7 @@ python -m pip install pyquaternion
 ```
 Create a workspace, and clone this repo and its dependencies:
 ```
-mkdir project_ws && cd ws && mkdir src && cd src
+mkdir project_ws && cd project_ws && mkdir src && cd src
 git clone https://github.com/sangitasahu/AER1516.git
 wstool init
 wstool merge -t src gazebo_drone.rosinstall
