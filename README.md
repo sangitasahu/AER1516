@@ -51,6 +51,7 @@ Open a new terminal again to check for all the topics that are being published:
 rostopic list
 ```
 ## Topics are:
+```
 /SQ01s/camera/cloud
 /SQ01s/camera/depth/camera_info
 /SQ01s/camera/depth/image_rect_raw
@@ -78,7 +79,7 @@ rostopic list
 /rosout
 /rosout_agg
 /tf
-
+```
 NOTE: 
 1) SQ01s is the name of the quadrotor in the simulation
 2) Set goal by publishing to /SQ01/goal
