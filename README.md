@@ -2,9 +2,8 @@
 
 Link to draw.io file:   https://app.diagrams.net/#G1JaMom59_h-Wq3BAk28IzTx_z-1hYDaKI
 
-########################################################
+## Set up the workspace
 
-##Set up the workspace
 This has been tested with Ubuntu 18.04/ROS Melodic
 
 Install the following dependencies:
@@ -22,20 +21,24 @@ wstool init
 wstool merge -t src gazebo_drone.rosinstall
 ```
 
-##Compile the code:
+## Compile the code:
 ```
 wstool update -j8
 cd ..
 catkin config -DCMAKE_BUILD_TYPE=Release
 catkin_make
 ```
-make sure you add the following line to your .bashrc file
+## Source your workspace
+Make sure you add the following line to your .bashrc file
 ( open a terminal at $home dir, and type gedit .bashrc ; scroll to the last line and add this line at the end ; save and exit) 
 ```
 source PATH_TO_YOUR_WS/devel/setup.bash
 ```
+(HINT: if you have sourced your workspace properly, typing roscd in a terminal must change the terminal directory to PATH_TO_YOUR_WS/devel)
 
-And finally open 3 terminals and execute these commands the three different terminals:
+## Launch the environment and Import the Drone into the Environment. 
+
+Open 3 terminals and execute these commands the three different terminals:
 ```
 roscore
 roslaunch acl_sim start_world.launch
