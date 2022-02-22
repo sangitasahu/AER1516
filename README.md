@@ -116,6 +116,3 @@ NOTE:
 3) Check status by subscribing to /SQ01/state
 4) ~/camera/ gives camera info, all data already transformed
 
-Visualize the camera data by : 
-''
-
