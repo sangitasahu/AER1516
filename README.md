@@ -9,7 +9,7 @@ This has been tested with Ubuntu 18.04/ROS Melodic
 
 Install the following dependencies:
 ```
-sudo apt-get install ros-"${ROS_DISTRO}"-gazebo-ros-pkgs ros-"${ROS_DISTRO}"-mavros-msgs ros-"${ROS_DISTRO}"-tf2-sensor-msgs
+sudo apt-get install ros-"${ROS_DISTRO}"-gazebo-ros-pkgs ros-"${ROS_DISTRO}"-mavros-msgs ros-"${ROS_DISTRO}"-tf2-sensor-msgs ros-"${ROS_DISTRO}"-hector-sensors-description
 ```
 ```
 sudo apt-get install python3-catkin-tools
