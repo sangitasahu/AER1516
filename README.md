@@ -116,3 +116,60 @@ NOTE:
 3) Check status by subscribing to /SQ01/state
 4) ~/camera/ gives camera info, all data already transformed
 
+## Git Project Structure
+
+For AER1516 project, we will have the following Git branches:
+
+--main
+  ---develop
+    ----mapper
+    ----global_planner
+    ----convex_decomposition
+    ----local_planner
+  ---testing
+
+From now onwards always commit to the "develop" branch. Once implementation is over, we can merge our code to the "testing" branch. Only at the end, the final code will be merged to the "main" branch.
+
+If you want to develop small modules inside your package, you can create multiple branches under your develop/xxxxx/ branch.
+
+Note: Local refers to your PC and remote refers to GitHub
+
+## Commands for setting up Git branch
+
+### Clone the Repo
+```
+$ git clone https://github.com/sangitasahu/AER1516.git
+```
+### Check the current branches 
+```
+$ cd AER1516/
+$ git branch
+$ git status
+```
+### Create a local branch (e.g. global_planner) if it doesn't exist
+```
+$ git checkout -b global_planner
+$ git branch
+```
+Note: I have created branches named "mapper", "local_planner" and "convex_decomposition" in Github. You can use them.
+
+### Add and commit all the current changes to the current local branch
+```
+$ git add .
+$ git commit -m <message>
+```
+
+### To connect the local branch to the remote branch
+```
+$ git branch --set-upstream-to=origin/global_planner global_planner
+```
+Note : Make sure there exists a branch with the local branch name in GitHub, else manually create it.
+
+### Push the changes from local branch to remote branch
+Note: Pulling is optional, pull from remote to local branch if required, else directly give push command.
+```
+$ git pull
+$ git push
+```
+Note: After every push, create a Pull request to the "develop" branch in GitHub by clicking "Create Pull Request" in your branch. Add a reviewer if possible, and then u can merge it to the "develop" branch.
+
