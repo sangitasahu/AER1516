@@ -1,0 +1,6 @@
+User Worlds for Gazebo:
+
+1. Cones
+2. Forest
+3. Maze
+4. Cylinders
