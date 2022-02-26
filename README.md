@@ -120,13 +120,18 @@ NOTE:
 
 For AER1516 project, we will have the following Git branches:
 
-###main
-  ###develop
-    ###mapper
-    ###global_planner
-    ###convex_decomposition
-    ###local_planner
-  ###testing
+1) main
+2) testing
+3) develop
+
+--- mapper
+
+---global_planner
+   
+---convex_decomposition
+    
+---local_planner
+
 
 From now onwards always commit to the "develop" branch. Once implementation is over, we can merge our code to the "testing" branch. Only at the end, the final code will be merged to the "main" branch.
 
