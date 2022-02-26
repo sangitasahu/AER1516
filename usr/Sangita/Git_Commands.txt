@@ -4,3 +4,8 @@ $ git branch
 $ git status
 $ git checkout -b global_planner
 $ git branch
+$ git add .
+$ git commit -m <message>
+$ git branch --set-upstream-to=origin/global_planner global_planner
+$ git pull
+$ git push
