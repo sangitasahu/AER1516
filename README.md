@@ -116,7 +116,7 @@ NOTE:
 3) Check status by subscribing to /SQ01/state
 4) ~/camera/ gives camera info, all data already transformed
 
-## Git Project Structure
+# Git Project Structure
 
 For AER1516 project, we will have the following Git branches:
 
@@ -134,7 +134,7 @@ If you want to develop small modules inside your package, you can create multipl
 
 Note: Local refers to your PC and remote refers to GitHub
 
-## Commands for setting up Git branch
+## Setting up your Git branch
 
 ### Clone the Repo
 ```
@@ -156,9 +156,12 @@ Note: I have created branches named "mapper", "local_planner" and "convex_decomp
 ### Add and commit all the current changes to the current local branch
 ```
 $ git add .
-$ git commit -m <message>
+$ git commit -m "my first commit!"
 ```
-
+Give appropriate mesages for future tracking. We can also combine both the add and commit commands.
+```
+git commit -a -m "updated git commands"
+```
 ### To connect the local branch to the remote branch
 ```
 $ git branch --set-upstream-to=origin/global_planner global_planner
@@ -173,3 +176,12 @@ $ git push
 ```
 Note: After every push, create a Pull request to the "develop" branch in GitHub by clicking "Create Pull Request" in your branch. Add a reviewer if possible, and then u can merge it to the "develop" branch.
 
+## Other Commands
+For switching to any branch
+```
+$ git checkout develop
+```
+For deleting a branch
+```
+$ git branch -d <branch_name>
+```
