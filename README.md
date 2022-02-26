@@ -48,8 +48,7 @@ git config --global credential.helper cache
 
 ## Initialize the workspace
 ```
-wstool init src
-wstool merge -t src ~/project_ws/AER1516/gazebo_drone.rosinstall
+wstool init src ~/project_ws/AER1516/gazebo_drone.rosinstall
 ```
 
 ## Compile the code:
