@@ -1,0 +1,11 @@
+$ git clone https://github.com/sangitasahu/AER1516.git
+$ cd AER1516/
+$ git branch
+$ git status
+$ git checkout -b global_planner
+$ git branch
+$ git add .
+$ git commit -m <message>
+$ git branch --set-upstream-to=origin/global_planner global_planner
+$ git pull
+$ git push
