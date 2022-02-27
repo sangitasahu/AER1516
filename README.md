@@ -162,7 +162,7 @@ $ git commit -m "my first commit!"
 ```
 Give appropriate mesages for future tracking. We can also combine both the add and commit commands.
 ```
-git commit -a -m "updated git commands"
+$ git commit -a -m "updated git commands"
 ```
 ### To connect the local branch to the remote branch
 ```
@@ -183,19 +183,19 @@ Caution: Donot create or merge others' Pull requests.
 ## Other Useful Commands
 To Make or initialise a folder as Git Folder
 ```
-git init
+$ git init
 ```
 Pointing the local git folder to remote repository.
 ```
-git remote add origin <http_address>
+$ git remote add origin <http_address>
 ```
 Update local repository with fresh data without merging them with current branch
 ```
-git fetch 
+$ git fetch 
 ```
 List Branches
 ```
-git branch  
+$ git branch  
 ```
 For switching to any branch
 ```
@@ -207,6 +207,6 @@ $ git branch -d <branch_name>
 ```
 To check the changes
 ```
-git diff 
+$ git diff 
 ```
 
