@@ -1,1 +1,17 @@
-Details of the Mapper Module
+octomap_listner package subsribes to the octomap_binary topic provided by the octomap_server package. 
+Details of installing and running octomap are included here.
+This package publishes occupancy info to the /occupancy_probability topic.
+The msg format is sensor_msg/PointCloud. The data is this message is:
+PointCloud.points: [x,y,z] coordinates of a voxel centre point.
+PointCloud.channels[0]: array of occupancy probability (>0.5 can be interpreted as occupied).
+The array indexes are in 1:1 correspondence with point indexes. 
+
+
+octomap_server package can be installed as follows:
+
+
+
+
+
+
+
