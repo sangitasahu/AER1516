@@ -9,6 +9,18 @@ The array indexes are in 1:1 correspondence with point indexes.
 
 octomap_server package can be installed as follows:
 
+Install octomap using 
+sudo apt-get install ros-melodic-octomap ros-melodic-octomap-server ros-melodic-octomap-mapping ros-melodic-octomap-ros ros-melodic-octomap-msgs
+
+Find octomap_mapping launch file. It should be located in
+/opt/ros/melodic/share/octomap_server/launch/octomap_mapping.launch
+
+Open it using sudo gedit to overwrite read-only access
+
+Edit the tag 
+<param name="frame_id" type
+
+
 
 
 
