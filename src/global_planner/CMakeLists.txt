@@ -12,6 +12,9 @@ find_package(catkin REQUIRED COMPONENTS
   rospy
   std_msgs
   map_simulator
+  geometry_msgs
+  snapstack_msgs
+  trajectory_msgs
 )
 
 ## System dependencies are found with CMake's conventions
@@ -104,7 +107,7 @@ find_package(catkin REQUIRED COMPONENTS
 catkin_package(
   INCLUDE_DIRS include
   LIBRARIES global_planner
-  DEPENDS rospy std_msgs map_simulator
+  DEPENDS rospy std_msgs map_simulator geometry_msgs snapstack_msgs trajectory_msgs
 )
 
 ###########
