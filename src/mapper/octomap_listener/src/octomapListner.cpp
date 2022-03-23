@@ -11,11 +11,11 @@
 #include "snapstack_msgs/State.h"
 #include <string>
    
+
 ros::Publisher pubProb;
 ros::Publisher pubPoints;
 tf::StampedTransform transform;
 snapstack_msgs::State quad_state;
-
 
 std::vector<std::vector<float>> sortedPointCloud(sensor_msgs::PointCloud& pointsCloud){
     std::vector<geometry_msgs::Point32> points3d = pointsCloud.points;
@@ -98,6 +98,7 @@ void octomap_binary_callback(const octomap_msgs::OctomapConstPtr& octomap_msg)
 
 int main(int argc, char **argv)
 {
+
     ros::init(argc, argv, "octomapListener");
     ros::NodeHandle n;
     ros::Subscriber sub = n.subscribe("octomap_binary", 1000, octomap_binary_callback);

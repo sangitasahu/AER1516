@@ -1,3 +1,4 @@
 /devel
 /build
-
+/src/acl-gazebo
+/src/snapstack_msgs
