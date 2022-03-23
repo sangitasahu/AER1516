@@ -1,4 +1,4 @@
-geometry_msgs/Vector3[] nodeCoordinates
+float64[] nodeCoordinates
 bool[] occupiedStatus
 uint16[] nodeDistances
 

@@ -11,7 +11,6 @@ find_package(catkin REQUIRED COMPONENTS
   roscpp
   rospy
   std_msgs
-  geometry_msgs
   message_generation
 )
 
@@ -72,7 +71,6 @@ find_package(catkin REQUIRED COMPONENTS
  generate_messages(
    DEPENDENCIES
    std_msgs
-   geometry_msgs
  )
 
 ################################################
@@ -107,7 +105,7 @@ find_package(catkin REQUIRED COMPONENTS
 catkin_package(
 #  INCLUDE_DIRS include
 #  LIBRARIES map_simulator
-  CATKIN_DEPENDS geometry_msgs
+#  CATKIN_DEPENDS roscpp rospy std_msgs
   CATKIN_DEPENDS message_runtime
 #  DEPENDS system_lib
 )
