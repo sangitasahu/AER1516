@@ -56,6 +56,12 @@ class LocalPlanner(object):
         self.t_start = rospy.get_rostime()
 
     def replan(self):
+        potato = 5
+
+    def update_goal(self):
+        potato = 5
+
+    def replan_debug(self):
         # Print interfaces to demonstrate they're coming in properly
         rospy.loginfo("Global Plan Position 1: %s",self.glob_plan.poses[0].pose.position)
         rospy.loginfo("Global Plan Position 2: %s",self.glob_plan.poses[1].pose.position)
@@ -73,7 +79,7 @@ class LocalPlanner(object):
 
         # float64[4] coef
 
-    def update_goal(self):
+    def update_goal_debug(self):
         # Fudge the goal location
         curr_time = rospy.get_rostime()
         dt = curr_time-self.t_start
