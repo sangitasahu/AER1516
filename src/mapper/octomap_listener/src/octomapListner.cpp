@@ -4,6 +4,7 @@
 #include <octomap_msgs/Octomap.h>
 #include <octomap_msgs/conversions.h>
 #include <std_msgs/Float32MultiArray.h>
+#include <std_msgs/Int32MultiArray.h>
 #include <geometry_msgs/Point32.h>
 #include <sensor_msgs/PointCloud.h>
 #include <vector>
@@ -12,23 +13,11 @@
 #include <string>
    
 ros::Publisher pubProb;
+ros::Publisher pubGrid;
 ros::Publisher pubPoints;
 tf::StampedTransform transform;
 snapstack_msgs::State quad_state;
 
-
-std::vector<std::vector<float>> sortedPointCloud(sensor_msgs::PointCloud& pointsCloud){
-    std::vector<geometry_msgs::Point32> points3d = pointsCloud.points;
-    std::vector<std::vector<float>> pointCloud;
-    std::vector<float> occupancyData = pointsCloud.channels[0].values;
-    int index = 0;
-    for(auto point:points3d){
-        pointCloud.push_back({point.x, point.y, point.z, occupancyData[index]});
-    }
-    std::sort(pointCloud.begin(), pointCloud.end());
-
-    return pointCloud;
-}
 
 void state_callback(const snapstack_msgs::State& state_msg)
 {
@@ -45,15 +34,21 @@ void octomap_binary_callback(const octomap_msgs::OctomapConstPtr& octomap_msg)
 
     octomap::OcTree* octree = dynamic_cast<octomap::OcTree*>(tree);
 
+    int bbx_upper = 5;
+    int bbx_lower = 0;
+    float resolution = 0.1;
+    int bsize = static_cast<int>((bbx_upper-bbx_lower)/resolution);
     octomap::point3d  occupancyPoints3d; 
     octomap::point3d  min_bbx;
-    min_bbx.x() = quad_pos.x-2;
-    min_bbx.y() = quad_pos.y-2;
-    min_bbx.z() = quad_pos.z-2;
+    min_bbx.x() = quad_pos.x+bbx_lower;
+    min_bbx.y() = quad_pos.y+bbx_lower;
+    min_bbx.z() = quad_pos.z+bbx_lower;
     octomap::point3d  max_bbx;
-    max_bbx.x() = quad_pos.x+5.;
-    max_bbx.y() = quad_pos.y+5.;
-    max_bbx.z() = quad_pos.z+5.;
+    max_bbx.x() = quad_pos.x+bbx_upper;
+    max_bbx.y() = quad_pos.y+bbx_upper;
+    max_bbx.z() = quad_pos.z+bbx_upper;
+
+
 
     std::vector<_Float32> occupancyProb;
       
@@ -62,6 +57,8 @@ void octomap_binary_callback(const octomap_msgs::OctomapConstPtr& octomap_msg)
     sensor_msgs::ChannelFloat32 occupancyChannel;
     std::vector<geometry_msgs::Point32> points3d;
     std::vector<sensor_msgs::ChannelFloat32> occupancyChannels;
+
+    std::vector<std::vector<std::vector<int>>> grid(bsize,std::vector<std::vector<int>>(bsize,std::vector<int>(bsize)));
 
 
     for(octomap::OcTree::leaf_bbx_iterator it = octree->begin_leafs_bbx(min_bbx,max_bbx), end = octree->end_leafs_bbx(); it!= end; ++it)
@@ -72,12 +69,21 @@ void octomap_binary_callback(const octomap_msgs::OctomapConstPtr& octomap_msg)
         point3d.y = occupancyPoints3d.y();
         point3d.z = occupancyPoints3d.z();
 
+        int x_index = int((occupancyPoints3d.x()-(quad_pos.x+0.05))/resolution);
+        int y_index = int((occupancyPoints3d.y()-(quad_pos.y+0.05))/resolution);
+        int z_index = int((occupancyPoints3d.z()-(quad_pos.z+0.05))/resolution);
+
+
+        if(it->getOccupancy()>0.5){
+            grid[x_index][y_index][z_index]=1;
+        }
+
         points3d.push_back(point3d);
 
         occupancyProb.push_back(it->getOccupancy());
+
     }
     
-
     occupancyChannel.name = "occupancy probability";
     occupancyChannel.values = occupancyProb;
 
@@ -92,6 +98,33 @@ void octomap_binary_callback(const octomap_msgs::OctomapConstPtr& octomap_msg)
 
     pubProb.publish(occupancy_info); 
 
+    // 3d occupancy grid
+    std_msgs::Int32MultiArray dat;
+
+    dat.layout.dim.push_back(std_msgs::MultiArrayDimension());
+    dat.layout.dim.push_back(std_msgs::MultiArrayDimension());
+    dat.layout.dim.push_back(std_msgs::MultiArrayDimension());
+    dat.layout.dim[0].label = "x dimension";
+    dat.layout.dim[1].label = "y dimension";
+    dat.layout.dim[2].label = "z dimension";
+    dat.layout.dim[0].size = bsize;
+    dat.layout.dim[1].size = bsize;
+    dat.layout.dim[2].size = bsize;
+    dat.layout.dim[0].stride = bsize*bsize*bsize;
+    dat.layout.dim[1].stride = bsize*bsize;
+    dat.layout.dim[2].stride = bsize;
+    dat.layout.data_offset = 0;
+    std::vector<int> vec(bsize*bsize*bsize,0);
+    for(int i = 0; i<bsize; i++){
+        for(int j=0; j<bsize; j++){
+            for(int k =0; k<bsize; k++){
+                vec[i*bsize*bsize+j*bsize+k] = grid[i][j][k];
+            }
+        }
+    }
+    dat.data = vec;
+
+    pubGrid.publish(dat);
     
 }
 
@@ -104,8 +137,10 @@ int main(int argc, char **argv)
     ros::NodeHandle state;
     ros::Subscriber sub_state = state.subscribe("/SQ01s/state", 10, state_callback);
     ros::NodeHandle occupancyProbability; 
+    ros::NodeHandle gridNode;
     ros::NodeHandle points;
     pubProb = occupancyProbability.advertise<sensor_msgs::PointCloud>("probability_publisher",1000);
+    pubGrid = gridNode.advertise<std_msgs::Int32MultiArray>("grid_publisher",1000);
 
     ros::spin();    
 }
