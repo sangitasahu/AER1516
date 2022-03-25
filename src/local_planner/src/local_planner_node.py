@@ -41,13 +41,14 @@ class LocalPlannerNode(object):
         self.path_topic = 'local_plan'
         self.path_pub = rospy.Publisher(self.path_topic,Path,queue_size=10)
         
-        # Objects
-        self.local_planner = LocalPlanner()
-
-        # Timers
+        # Rates
         self.replan_freq = 0.2
         self.goal_freq = 100
 
+        # Objects
+        self.local_planner = LocalPlanner(self.replan_freq)
+
+        # Timers
         self.replan_timer = rospy.Timer(rospy.Duration(1.0/self.replan_freq),self.replan_callback)
         self.update_goal_timer = rospy.Timer(rospy.Duration(1.0/self.goal_freq),self.update_goal_callback)
 
