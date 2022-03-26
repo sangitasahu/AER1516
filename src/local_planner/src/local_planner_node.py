@@ -25,9 +25,16 @@ class LocalPlannerNode(object):
     " Local planner node object for optimization based local trajectory planning"
     def __init__(self):
 
+        # Rates
+        self.replan_freq = 0.2
+        self.goal_freq = 100
+
+        # Objects
+        self.local_planner = LocalPlanner(self.replan_freq,self.goal_freq)
+
         # Subscribers
-        # self.state_topic = '/SQ01s/state'
-        # self.state_sub = rospy.Subscriber(self.state_topic,State,callback=self.state_sub_callback)
+        self.state_topic = '/SQ01s/state'
+        self.state_sub = rospy.Subscriber(self.state_topic,State,callback=self.state_sub_callback)
         self.glob_plan_topic = 'global_plan'
         self.glob_plan_sub = rospy.Subscriber(self.glob_plan_topic,Path,callback=self.glob_plan_sub_callback)
         self.cvx_decomp_topic = 'cvx_decomp'
@@ -40,13 +47,6 @@ class LocalPlannerNode(object):
         self.goal_pub = rospy.Publisher(self.goal_topic,Goal,queue_size=10)
         self.path_topic = 'local_plan'
         self.path_pub = rospy.Publisher(self.path_topic,Path,queue_size=10)
-        
-        # Rates
-        self.replan_freq = 0.2
-        self.goal_freq = 100
-
-        # Objects
-        self.local_planner = LocalPlanner(self.replan_freq,self.goal_freq)
 
         # Timers
         self.replan_timer = rospy.Timer(rospy.Duration(1.0/self.replan_freq),self.replan_callback)

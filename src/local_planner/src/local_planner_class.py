@@ -51,7 +51,7 @@ class LocalPlanner(object):
 
         self.local_plan = Path()
 
-        self.frame_id = "map"
+        self.frame_id = "world"
 
         # Planner parameters
         # Run rates
@@ -70,8 +70,8 @@ class LocalPlanner(object):
 
         # Optimizer parameters
         self.coll_M = 1000 # Collision constraint upper bound
-        self.n_int_max = 3 # Maximum number of JPS intervals
-        self.n_plane_max = 2 # Maximum number of polyhedron planes per interval
+        self.n_int_max = 5 # Maximum number of JPS intervals
+        self.n_plane_max = 8 # Maximum number of polyhedron planes per interval
         self.log_settings = mosek.streamtype.log # Detail level of output
         self.set_var_names = True # Label variable names or not. Performance is allegedly faster without
 
@@ -151,22 +151,35 @@ class LocalPlanner(object):
 
         self.t_traj_opt_start = 0
         self.dT_traj_opt = 10
+        self.t_alloc_min = 0.1 # Minimum trajectory time s
 
-        # Storage for committed trajectory
-        # We maintain this in case the optimizer does not converge for a few iterations, or if it finishes planning early
+        # Trajectory Parameters
+        # Committed trajectory. We maintain this in case the optimizer does not converge for a few iterations, or if it finishes planning early
         self.cp_p_comm = np.zeros(self.num_pos)
         self.cp_v_comm = np.zeros(self.num_vel)
         self.cp_a_comm = np.zeros(self.num_accel)
         self.cp_j_comm = np.zeros(self.num_jerk)
         self.bin_comm = np.zeros(self.num_bin)
 
+        self.t_traj_comm_start = 0
+        self.dT_traj_comm = 10 # Nonzero value, avoid zero division
+
         self.yaw_filt_val = 0
         self.yaw_tol = 1E-2
         self.yaw_filt_cutoff = 10 # Hz
         self.yaw_filt_coef = (2*pi*self.yaw_filt_cutoff/self.goal_freq)/(1+2*pi*self.yaw_filt_cutoff/self.goal_freq)
 
-        self.t_traj_comm_start = 0
-        self.dT_traj_comm = 10 # Nonzero value, avoid zero division
+        # Option to plan from future or last reported state
+        self.plan_start_future = False
+        self.plan_future_t_fac = 1.25 # Factor to apply to execution time from last replanning iteration. Make sure we can find a new plan in time
+        self.replan_time_prev = 0 # First replan should be immediate
+
+        # Start time
+        self.t_start_int_debug = rospy.get_rostime()
+        self.first_plan = True
+        self.fake_plan = False # Test option for just executing plan from first state
+        self.fake_t_alloc = 15
+        self.t_start_plan = 0
 
         # Set variable and constraint names
         if self.set_var_names:
@@ -429,13 +442,6 @@ class LocalPlanner(object):
         # Define objective function sense
         self.task.putobjsense(mosek.objsense.minimize)
 
-        # Start time
-        self.t_start = rospy.get_rostime()
-        self.first_plan = True
-        self.fake_first_plan = True
-        self.fake_t_alloc = 15
-        self.t_start_plan = 0
-
     def __del__(self):
         # Close MOSEK
         self.task.__del__()
@@ -445,7 +451,8 @@ class LocalPlanner(object):
         # Get start time for cutting off if we run for too long
         t_replan_start = rospy.get_rostime()
 
-        if self.fake_first_plan and self.first_plan:
+        # Option for fake planning where we execute static problem from first state
+        if self.fake_plan and self.first_plan:
             self.t_start_plan = t_replan_start.to_sec()
             self.first_plan = False
 
@@ -469,7 +476,8 @@ class LocalPlanner(object):
         # Calculate minimum time for constant input motions between current and goal states, multiply by adaptive scale factor
         x_0 = np.array([state_start.pos.x,state_start.pos.y,state_start.pos.z])
         v_0 = np.array([state_start.vel.x,state_start.vel.y,state_start.vel.z])
-        if self.fake_first_plan:
+        if self.fake_plan:
+            # For fake static problem just run from first state
             x_0 = np.array([global_plan.poses[0].pose.position.x,
                             global_plan.poses[0].pose.position.y,
                             global_plan.poses[0].pose.position.z])
@@ -486,8 +494,10 @@ class LocalPlanner(object):
                                 np.abs(dv)/self.a_max)))
         
         t_alloc = t_min*self.f
-        if self.fake_first_plan:
+        if self.fake_plan:
+            # Time allocation fixed for fake static problem
             t_alloc = self.fake_t_alloc
+        t_alloc = max(t_alloc,self.t_alloc_min) # Minimum trajectory time
         dT = t_alloc/self.n_seg
 
         # Update bounds and constraints based on parameters for this timestep
@@ -658,7 +668,7 @@ class LocalPlanner(object):
         self.task.putqobj(q_cost_subi,q_cost_subi,q_cost_val)
 
         # Call solver
-        # TODO: Try some of the stuff here to speed is up:
+        # TODO: Try some of the stuff here to speed it up:
         # https://docs.mosek.com/latest/pythonapi/mip-optimizer.html#speeding-up-the-solution-process
         self.task.optimize()
         self.task.solutionsummary(mosek.streamtype.log)
@@ -690,8 +700,11 @@ class LocalPlanner(object):
         self.bin_opt = self.xx[self.ind_bin:self.ind_bin + self.num_bin]
 
         self.t_traj_opt_start = state_start.header.stamp.to_sec()
-        if self.fake_first_plan:
+
+        # Fake planning option just runs from starting position
+        if self.fake_plan:
             self.t_traj_opt_start = self.t_start_plan
+        
         self.dT_traj_opt = dT
 
         # Update path for visualization. Interpolate position values along entire length
@@ -700,11 +713,15 @@ class LocalPlanner(object):
                                 self.dT_traj_opt*np.ones(self.n_seg),num_disc = 20)
         iden_quat = Quaternion(x=0,y=0,z=0,w=1)
         new_pose_list = []
-        new_path_header = Header(stamp=rospy.get_rostime,frame_id = self.frame_id)
+        new_path_header = Header(stamp=rospy.get_rostime(),frame_id = self.frame_id)
         for i in range(p_interp.shape[1]):
             new_pose_list.append(PoseStamped(new_path_header,Pose(position=Point(x=p_interp[0,i],y=p_interp[1,i],z=p_interp[2,i]),
                                                             orientation = iden_quat)))
         self.local_plan = Path(new_path_header,new_pose_list)
+
+        # Store replan time for adjustments on future iterations
+        t_replan_finish = rospy.get_rostime()
+        self.replan_time_prev = (t_replan_finish-t_replan_start).to_sec()
 
     def update_goal(self):
 
@@ -783,7 +800,7 @@ class LocalPlanner(object):
     def update_goal_debug(self):
         # Fudge the goal location
         curr_time = rospy.get_rostime()
-        dt = curr_time-self.t_start
+        dt = curr_time-self.t_start_int_debug
         sine_freq = 0.5 # Hz
         sine_amp = 2 # m?
         self.goal.p.x = 0
