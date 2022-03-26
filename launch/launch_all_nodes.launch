@@ -1,5 +1,4 @@
 <launch>
-	<!-- Folder path (needs to be changed by every user)----->
 	<arg name="my_workspace_path" default="/home/sangita/project_ws/AER1516"/>	
 
 	<!-- Launch ACL Gazebo -->
@@ -7,7 +6,7 @@
 	<include file="$(arg my_workspace_path)/src/acl-gazebo/acl_sim/launch/perfect_tracker_and_sim.launch" />
 	
 	<!-- Octomap Launch -->
-	<include file="/opt/ros/melodic/share/octomap_server/octomap_mapper.launch" />
+	<include file="/opt/ros/melodic/share/octomap_server/launch/octomap_mapping.launch" />
 
 	<!-- Mapper Module -->
 	<include file="$(arg my_workspace_path)/src/mapper/launch/start_mapper.launch" />
