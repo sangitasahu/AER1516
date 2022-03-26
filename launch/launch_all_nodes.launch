@@ -1,5 +1,4 @@
 <launch>
-	<!-- Folder path -------Needs to be changed by the user----->
 	<arg name="my_workspace_path" default="/home/sangita/project_ws/AER1516"/>	
 
 	<!-- Launch ACL Gazebo -->
