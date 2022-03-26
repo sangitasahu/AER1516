@@ -1,0 +1,6 @@
+<launch>
+	
+	<!-- Local Planner Module -->
+	<node name="local_planner" pkg="local_planner" type="local_planner_node.py" output="screen"/>
+
+</launch>
