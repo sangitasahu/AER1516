@@ -9,7 +9,7 @@
 	<include file="/opt/ros/melodic/share/octomap_server/octomap_mapper.launch" />
 
 	<!-- Mapper Module -->
-	<include file="$(arg my_workspace_path)/src/mapper/launch/start_mapper.launch" />
+	<include file="$(arg my_workspace_path)/src/mapper/launch/octomap_launch.launch" />
 
 	<!-- Global Planner Module -->
 	<include file="$(arg my_workspace_path)/src/global_planner/launch/start_global_planner.launch" />
