@@ -19,7 +19,7 @@ from nav_msgs.msg import Path
 from snapstack_msgs.msg import State, Goal
 from geometry_msgs.msg import Point, Vector3, Quaternion, PoseStamped
 from std_msgs.msg import Float64
-from local_planner.msg import CvxDecomp, Polyhedron
+from convex_decomposer.msg import CvxDecomp, Polyhedron
 
 class LocalPlannerNode(object):
     " Local planner node object for optimization based local trajectory planning"

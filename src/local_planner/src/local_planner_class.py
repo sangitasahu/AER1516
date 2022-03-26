@@ -24,7 +24,7 @@ from snapstack_msgs.msg import State, Goal
 from geometry_msgs.msg import Point, Vector3, Quaternion, PoseStamped, Pose
 from shape_msgs.msg import Plane
 from std_msgs.msg import Float64, Header
-from local_planner.msg import CvxDecomp, Polyhedron
+from convex_decomposer.msg import CvxDecomp, Polyhedron
 
 class LocalPlanner(object):
     "Local Planner Class"
