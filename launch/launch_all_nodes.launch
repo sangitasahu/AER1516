@@ -17,5 +17,8 @@
 
 	<!-- Local Planner Module -->
 	<include file="$(arg my_workspace_path)/src/local_planner/launch/start_local_planner.launch" />
+	
+	<!-- Octomap Launch -->
+	<include file="/opt/ros/melodic/share/octomap_server/octomap_mapper.launch" />
 
 </launch>
