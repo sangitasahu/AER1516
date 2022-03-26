@@ -10,7 +10,6 @@ project(local_planner)
 find_package(catkin REQUIRED COMPONENTS
   rospy
   std_msgs
-  message_generation
   geometry_msgs
   snapstack_msgs
   shape_msgs
@@ -51,11 +50,11 @@ find_package(catkin REQUIRED COMPONENTS
 ##   * add every package in MSG_DEP_SET to generate_messages(DEPENDENCIES ...)
 
 ## Generate messages in the 'msg' folder
-add_message_files(
-   FILES
-   CvxDecomp.msg
-   Polyhedron.msg
- )
+# add_message_files(
+#   FILES
+#   CvxDecomp.msg
+#   Polyhedron.msg
+# )
 
 ## Generate services in the 'srv' folder
 # add_service_files(
@@ -72,10 +71,10 @@ add_message_files(
 # )
 
 ## Generate added messages and services with any dependencies listed here
-generate_messages(
-   DEPENDENCIES
-   shape_msgs
- )
+# generate_messages(
+#   DEPENDENCIES
+#   shape_msgs
+# )
 
 ################################################
 ## Declare ROS dynamic reconfigure parameters ##
