@@ -1,12 +1,21 @@
-octomap_listner package subsribes to the octomap_binary topic provided by the octomap_server package. 
+octomap_listner package subscribes to the octomap_binary topic provided by the octomap_server package. 
 Details of installing and running octomap are included here.
-This package publishes occupancy info to the /occupancy_probability topic.
-The msg format is sensor_msg/PointCloud. The data is this message is:
+
+Node Name: listener
+
+Topics:
+1) /occupancy_publisher
+2) /grid_publisher
+
+This package publishes occupancy info to the /occupancy_publisher topic as a point cloud.
+The msg format is sensor_msg/PointCloud. The data in this message is:
 PointCloud.points: [x,y,z] coordinates of a voxel centre point.
 PointCloud.channels[0]: array of occupancy probability (>0.5 can be interpreted as occupied).
 The array indexes are in 1:1 correspondence with point indexes. 
 
-There is a helper function in the cpp file to convert the point cloud to an nx4 sorted array. You can copy this function in your script.  
+/grid_publisher publishes a 3d array with occupancy info as a std_msgs/Int32MultiArray.
+The occupancy info for a given point can be retrieved by grid[x_coord][y_coord][z_coord]. The point at (0.5,0.5,0.5) from the drone position is setup as the origin for the grid and resolution is 0.1 units. For example grid[0][1][2] will give the occupancy info at the point (0.5, 0.15, 0.25) wrt the drone position. 
+Note that std_msgs/Int32MultiArray transmits data as a 1d array. The 3d array can be rebuilt from the info transmitted by the message. Please refer to the Int32MultiArray docs. 
 
 octomap_server package can be installed as follows:
 
@@ -21,6 +30,7 @@ Open it using sudo gedit to overwrite read-only access
 Edit the tag 
 <param name="frame_id" type> and set 'frame id' = vicon 
 Change the 'cloud_in' tag by adding the topic /SQ01s/camera/cloud
+
 
 
 
