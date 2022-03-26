@@ -5,6 +5,9 @@
 	<!-- Launch ACL Gazebo -->
 	<include file="$(arg my_workspace_path)/src/acl-gazebo/acl_sim/launch/start_world.launch" />
 	<include file="$(arg my_workspace_path)/src/acl-gazebo/acl_sim/launch/perfect_tracker_and_sim.launch" />
+	
+	<!-- Octomap Launch -->
+	<include file="/opt/ros/melodic/share/octomap_server/octomap_mapper.launch" />
 
 	<!-- Mapper Module -->
 	<include file="$(arg my_workspace_path)/src/mapper/launch/start_mapper.launch" />
@@ -17,8 +20,5 @@
 
 	<!-- Local Planner Module -->
 	<include file="$(arg my_workspace_path)/src/local_planner/launch/start_local_planner.launch" />
-	
-	<!-- Octomap Launch -->
-	<include file="/opt/ros/melodic/share/octomap_server/octomap_mapper.launch" />
 
 </launch>
