@@ -1,0 +1,8 @@
+<launch>
+	<!-- Octomap Launch -->
+	<node name="probability_publisher" pkg="octomap_listener" type="listener"/>
+	<node name="grid_publisher" pkg="octomap_listener" type="listener"/>
+</launch>
+
+
+
