@@ -210,3 +210,21 @@ To check the changes
 $ git diff 
 ```
 
+## MOSEK Installation Steps
+The MOSEK optimizer needs to be installed both systemwide as well as installing a Python package to interface with it. Installation steps are described in the documentation here: https://docs.mosek.com/9.3/install/installation.html for the general setup and here: https://docs.mosek.com/latest/pythonapi/install-interface.html for the Python interface
+1. Request an academic license here with your school email: https://www.mosek.com/products/academic-licenses/. It's automated and you should get an email relatively quickly
+2. Download and run the overall installer for your system from here: https://docs.mosek.com/9.3/install/installation.html#general-setup
+3. Add a path variable for the runnable location. I did it by adding the following to my .bashrc. I have it installed in my home directory so if you put it elsewhere you'll have to update that obviously
+```
+# MOSEK path
+export PATH=$PATH:~/mosek/mosek/9.3/tools/platform/linux64x86/bin
+```
+4. Dump the license file they send you in the root install folder below. Check it's set up properly by running msktestlic in a terminal
+```
+$HOME/mosek/mosek.lic
+```
+5. Install the Python interface via Pip in the Python environment your ROS setup is using
+```
+pip install Mosek
+```
+6. That's it! If you want you can test it by downloading and running one of the tutorial problems. There's a simple QP example here: https://docs.mosek.com/latest/pythonapi/tutorial-qo-shared.html . The general documentation for the Python interface is here if you're curious: https://docs.mosek.com/latest/pythonapi/intro_info.html
