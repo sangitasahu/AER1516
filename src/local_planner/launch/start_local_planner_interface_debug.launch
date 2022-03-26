@@ -1,0 +1,7 @@
+<launch>
+	
+	<!-- Local Planner Module -->
+	<node name="test_talker" pkg="local_planner" type="test_talker.py"/>
+	<node name="local_planner" pkg="local_planner" type="local_planner_node.py"/>
+
+</launch>
