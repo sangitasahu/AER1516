@@ -1,0 +1,21 @@
+<launch>
+	<!-- Folder path -------Needs to be changed by the user----->
+	<arg name="my_workspace_path" default="/home/sangita/project_ws/AER1516"/>	
+
+	<!-- Launch ACL Gazebo -->
+	<include file="$(arg my_workspace_path)/src/acl-gazebo/acl_sim/launch/start_world.launch" />
+	<include file="$(arg my_workspace_path)/src/acl-gazebo/acl_sim/launch/perfect_tracker_and_sim.launch" />
+
+	<!-- Mapper Module -->
+	<include file="$(arg my_workspace_path)/src/mapper/launch/start_mapper.launch" />
+
+	<!-- Global Planner Module -->
+	<include file="$(arg my_workspace_path)/src/global_planner/launch/start_global_planner.launch" />
+
+	<!-- Conver Decomposition Module -->
+	<include file="$(arg my_workspace_path)/src/convex_decomposition/launch/start_convex_decomposition.launch" />
+
+	<!-- Local Planner Module -->
+	<include file="$(arg my_workspace_path)/src/local_planner/launch/start_local_planner.launch" />
+
+</launch>
