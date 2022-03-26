@@ -56,3 +56,34 @@ def bezier_curve(P,dT,n=3,num_disc=100):
     t = t_temp
     
     return x,t
+
+def bezier_interpolate(P,dT,t,n=3):
+    """
+    Interpolate value for a piecewise Bezier curve in multiple axes
+
+    Parameters
+    ----------
+    P : Control points. Array of shape (axes x points x time intervals)
+    dT : Time intervals for each curve segment
+    t : Time to interpolate at
+    n: Degree
+
+    Returns
+    -------
+    x - Interpolated value. Shape (axes,)
+    """
+
+    # Clamp t to live between 0 and max time
+    t_cum = np.cumsum(dT)
+    t_clamp = np.clip(t,0,t_cum[-1])
+    ind_curr = np.min(np.argwhere(t_clamp<=t_cum))
+
+    t_norm = (t_clamp-t_cum[ind_curr]+dT[ind_curr])/dT[ind_curr]
+
+    # Build Berstein polynomial basis function values at interpolated point
+    b_poly = np.zeros(n+1)
+    for i in range(n+1):
+        b_poly[i] = bernstein_poly(i,n,t_norm)
+
+    # Result is weighted sum
+    return np.matmul(P[:,:,ind_curr],b_poly.reshape((n+1,1)))

@@ -33,6 +33,18 @@ class local_planner_test_talker:
                                 [2,3.5,12],
                                 [10,15,20]])
 
+        plane_norms_fake = np.array([[[-1,0,0],[1,0,0]],
+                                 [[0,1,0],[0,-1,0]],
+                                 [[-1,0,0],[0,0,-1]]])
+        plane_coefs_fake = np.array([[2,2],
+                                 [12,-7],
+                                 [-15,-3]])
+
+        # 2 point problem
+        ic_p = np.array([0,0,0])
+        bc_p = np.array([20,20,5])
+        self.positions = np.array([ic_p,bc_p])
+
         # Published values
         self.global_plan = Path()
         self.cvx_decomp = CvxDecomp()
@@ -45,11 +57,21 @@ class local_planner_test_talker:
             pose_list.append(pose_new)
         self.global_plan.poses = pose_list
 
-        plane_list = []
-        for i in range(self.planes.shape[0]):
-            plane_list.append(Plane(coef=self.planes[i,:].tolist()))
+        # plane_list = []
+        # for i in range(self.planes.shape[0]):
+        #     plane_list.append(Plane(coef=self.planes[i,:].tolist()))
 
-        self.cvx_decomp = CvxDecomp(polyhedra = [Polyhedron(planes=plane_list)])
+        # self.cvx_decomp = CvxDecomp(polyhedra = [Polyhedron(planes=plane_list)])
+
+        polyhedron_list = []
+        for i in range(plane_coefs_fake.shape[0]):
+            plane_list = []
+            for j in range(len(plane_coefs_fake[i,:])):
+                plane_coefs = plane_norms_fake[i,j,:].tolist()
+                plane_coefs.append(plane_coefs_fake[i,j])
+                plane_list.append(Plane(coef=plane_coefs))   
+            polyhedron_list.append(Polyhedron(planes=plane_list))
+        self.cvx_decomp = CvxDecomp(polyhedra=polyhedron_list)
 
         self.loop_rate = 10 # Hz
         self.report_rate = 50
@@ -62,7 +84,8 @@ class local_planner_test_talker:
             self.glob_plan_pub.publish(self.global_plan)
             self.cvx_decomp_pub.publish(self.cvx_decomp)
             if counter%100 == 0:
-                rospy.loginfo("Published global plan/convex decomp, time = %d",rospy.get_rostime().to_sec())
+                # rospy.loginfo("Published global plan/convex decomp, time = %d",rospy.get_rostime().to_sec())
+                potato = 5
             counter+=1
             self.rate.sleep()
 

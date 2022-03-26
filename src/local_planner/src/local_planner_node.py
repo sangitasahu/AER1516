@@ -26,8 +26,8 @@ class LocalPlannerNode(object):
     def __init__(self):
 
         # Subscribers
-        self.state_topic = '/SQ01s/state'
-        self.state_sub = rospy.Subscriber(self.state_topic,State,callback=self.state_sub_callback)
+        # self.state_topic = '/SQ01s/state'
+        # self.state_sub = rospy.Subscriber(self.state_topic,State,callback=self.state_sub_callback)
         self.glob_plan_topic = 'global_plan'
         self.glob_plan_sub = rospy.Subscriber(self.glob_plan_topic,Path,callback=self.glob_plan_sub_callback)
         self.cvx_decomp_topic = 'cvx_decomp'
@@ -46,26 +46,26 @@ class LocalPlannerNode(object):
         self.goal_freq = 100
 
         # Objects
-        self.local_planner = LocalPlanner(self.replan_freq)
+        self.local_planner = LocalPlanner(self.replan_freq,self.goal_freq)
 
         # Timers
         self.replan_timer = rospy.Timer(rospy.Duration(1.0/self.replan_freq),self.replan_callback)
         self.update_goal_timer = rospy.Timer(rospy.Duration(1.0/self.goal_freq),self.update_goal_callback)
 
     def state_sub_callback(self,msg):
-        # REMINDER TO POTENTIALLY ADDRESS THREAD SAFETY
+        # TODO: May need to consider thread safety
         self.local_planner.state = msg
     
     def glob_plan_sub_callback(self,msg):
-        # REMINDER TO POTENTIALLY ADDRESS THREAD SAFETY
+        # TODO: May need to consider thread safety
         self.local_planner.glob_plan = msg
 
     def cvx_decomp_sub_callback(self,msg):
-        # REMINDER TO POTENTIALLY ADDRESS THREAD SAFETY
+        # TODO: May need to consider thread safety
         self.local_planner.cvx_decomp = msg
 
     def global_goal_sub_callback(self,msg):
-        # REMINDER TO POTENTIALLY ADDRESS THREAD SAFETY
+        # TODO: May need to consider thread safety
         self.local_planner.global_goal = msg
 
     def replan_callback(self,event):

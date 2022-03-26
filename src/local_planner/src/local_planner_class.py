@@ -16,19 +16,19 @@ import mosek as mosek
 from tf.transformations import quaternion_from_euler, euler_from_quaternion, quaternion_about_axis, quaternion_multiply
 
 # Helper functions
-import bezier_curves
+from bezier_curves import bezier_curve, bezier_interpolate
 
 # Import message types
 from nav_msgs.msg import Path
 from snapstack_msgs.msg import State, Goal
-from geometry_msgs.msg import Point, Vector3, Quaternion, PoseStamped
+from geometry_msgs.msg import Point, Vector3, Quaternion, PoseStamped, Pose
 from shape_msgs.msg import Plane
 from std_msgs.msg import Float64, Header
 from local_planner.msg import CvxDecomp, Polyhedron
 
 class LocalPlanner(object):
     "Local Planner Class"
-    def __init__(self,replan_freq):
+    def __init__(self,replan_freq,goal_freq):
         
         # Storage
         # Inputs
@@ -51,7 +51,13 @@ class LocalPlanner(object):
 
         self.local_plan = Path()
 
+        self.frame_id = "map"
+
         # Planner parameters
+        # Run rates
+        self.replan_freq = replan_freq
+        self.goal_freq = goal_freq
+
         # Vehicle limits
         self.v_max = 3 # m/s
         self.a_max = 10 # m/s2
@@ -64,14 +70,13 @@ class LocalPlanner(object):
 
         # Optimizer parameters
         self.coll_M = 1000 # Collision constraint upper bound
-        self.n_int_max = 5 # Maximum number of JPS intervals
-        self.n_plane_max = 8 # Maximum number of polyhedron planes per interval
+        self.n_int_max = 3 # Maximum number of JPS intervals
+        self.n_plane_max = 2 # Maximum number of polyhedron planes per interval
         self.log_settings = mosek.streamtype.log # Detail level of output
         self.set_var_names = True # Label variable names or not. Performance is allegedly faster without
 
         # Time line search parameters
         self.f = 3 # Factor on constant motion solution. Start conservatively
-        self.replan_freq = replan_freq
         self.alpha = 1.25 # Replanning time factor to plan from on old solution
         self.gamma_up = 1 # Limit on how much time factor can increase/decrease on each timestep
         self.gamma_down = 0.25
@@ -83,16 +88,11 @@ class LocalPlanner(object):
         self.task = self.msk_env.Task()
 
         # Misc logging settings
+        self.opt_run = False
         self.msk_env.set_Stream(mosek.streamtype.log, self.streamprinter) # Optimizer output
         self.task.set_Stream(mosek.streamtype.log, self.streamprinter) # Optimizer output
         self.task.putintparam(mosek.iparam.infeas_report_auto, mosek.onoffkey.on) # Infeasibility report
-
-        # Storage for solution
-        self.xx = np.zeros(self.numvar)
-        self.cp_p_opt = np.zeros(self.num_pos)
-        self.cp_v_opt = np.zeros(self.num_vel)
-        self.cp_a_opt = np.zeros(self.num_accel)
-        self.cp_j_opt = np.zeros(self.num_jerk)
+        self.task.putintparam(mosek.iparam.max_num_warnings,1) # Warning suppression(zeroing out constraints creates warnings)
 
         # Decision variables:
         # 4x position control points per segment,
@@ -103,7 +103,7 @@ class LocalPlanner(object):
         self.num_vel = 3*self.n_seg*(self.n_cp-1)
         self.num_accel = 3*self.n_seg*(self.n_cp-2)
         self.num_jerk = 3*self.n_seg*(self.n_cp-3)
-        self.num_bin = self.n_int*self.n_seg
+        self.num_bin = self.n_int_max*self.n_seg
 
         self.numvar = self.num_pos+self.num_vel+self.num_accel+self.num_jerk+self.num_bin
 
@@ -114,12 +114,12 @@ class LocalPlanner(object):
         self.ind_bin = self.ind_jerk+self.num_jerk
 
         # Constraints:
-        # Continuity, collision, consistency between p/v/a/j, binary variables
+        # Listed in the following order: Continuity, collision, consistency between p/v/a/j, binary variable sum
         self.num_cont = 3*self.spline_deg*(self.n_seg-1)
         self.num_planes = self.n_int_max*self.n_plane_max
         self.num_coll_per_seg = self.n_cp*self.num_planes
         self.num_coll = self.n_seg*self.num_coll_per_seg
-        self.num_cons = int(round(self.n_seg*3*self.deg*(self.deg+1)/2))
+        self.num_cons = int(round(self.n_seg*3*self.spline_deg*(self.spline_deg+1)/2))
         self.num_bin_sum = self.n_seg
 
         self.numcon = int(round(self.num_cont+self.num_coll+self.num_cons+self.num_bin_sum))
@@ -140,6 +140,33 @@ class LocalPlanner(object):
         # Add variables
         self.task.appendvars(self.numvar)
         self.task.appendcons(self.numcon)
+
+        # Storage for solution
+        self.xx = np.zeros(self.numvar)
+        self.cp_p_opt = np.zeros(self.num_pos)
+        self.cp_v_opt = np.zeros(self.num_vel)
+        self.cp_a_opt = np.zeros(self.num_accel)
+        self.cp_j_opt = np.zeros(self.num_jerk)
+        self.bin_opt = np.zeros(self.num_bin)
+
+        self.t_traj_opt_start = 0
+        self.dT_traj_opt = 10
+
+        # Storage for committed trajectory
+        # We maintain this in case the optimizer does not converge for a few iterations, or if it finishes planning early
+        self.cp_p_comm = np.zeros(self.num_pos)
+        self.cp_v_comm = np.zeros(self.num_vel)
+        self.cp_a_comm = np.zeros(self.num_accel)
+        self.cp_j_comm = np.zeros(self.num_jerk)
+        self.bin_comm = np.zeros(self.num_bin)
+
+        self.yaw_filt_val = 0
+        self.yaw_tol = 1E-2
+        self.yaw_filt_cutoff = 10 # Hz
+        self.yaw_filt_coef = (2*pi*self.yaw_filt_cutoff/self.goal_freq)/(1+2*pi*self.yaw_filt_cutoff/self.goal_freq)
+
+        self.t_traj_comm_start = 0
+        self.dT_traj_comm = 10 # Nonzero value, avoid zero division
 
         # Set variable and constraint names
         if self.set_var_names:
@@ -312,12 +339,12 @@ class LocalPlanner(object):
         # Full constraint has a term for velocity as well that has a factor of dT
         # This is added on each timestep as it changes
         a_sub_v_cons = np.zeros(np.size(a_val_v_cons),dtype=np.int32)
-        a_sub_v_cons[0::3*(self.n_cp-1)] = ind_p0
-        a_sub_v_cons[1::3*(self.n_cp-1)] = ind_p0+1
-        a_sub_v_cons[2::3*(self.n_cp-1)] = ind_p0+1
-        a_sub_v_cons[3::3*(self.n_cp-1)] = ind_p0+2
-        a_sub_v_cons[4::3*(self.n_cp-1)] = ind_p0+2
-        a_sub_v_cons[5::3*(self.n_cp-1)] = ind_p0+3
+        a_sub_v_cons[0::2*(self.n_cp-1)] = ind_p0
+        a_sub_v_cons[1::2*(self.n_cp-1)] = ind_p0+1
+        a_sub_v_cons[2::2*(self.n_cp-1)] = ind_p0+1
+        a_sub_v_cons[3::2*(self.n_cp-1)] = ind_p0+2
+        a_sub_v_cons[4::2*(self.n_cp-1)] = ind_p0+2
+        a_sub_v_cons[5::2*(self.n_cp-1)] = ind_p0+3
         
         ptrb_v_cons = np.arange(0,np.size(a_val_v_cons),2,dtype=np.int32)
         ptre_v_cons = np.arange(2,np.size(a_val_v_cons)+1,2,dtype=np.int32)
@@ -341,10 +368,10 @@ class LocalPlanner(object):
         # Sparsity pattern for this constraint. See documentation
         # Again, factor of dT changes for each timestep so only set the constant terms
         a_sub_a_cons = np.zeros(np.size(a_val_a_cons),dtype=np.int32)
-        a_sub_a_cons[0::3*(self.n_cp-2)] = ind_v0
-        a_sub_a_cons[1::3*(self.n_cp-2)] = ind_v0+1
-        a_sub_a_cons[2::3*(self.n_cp-2)] = ind_v0+1
-        a_sub_a_cons[3::3*(self.n_cp-2)] = ind_v0+2
+        a_sub_a_cons[0::2*(self.n_cp-2)] = ind_v0
+        a_sub_a_cons[1::2*(self.n_cp-2)] = ind_v0+1
+        a_sub_a_cons[2::2*(self.n_cp-2)] = ind_v0+1
+        a_sub_a_cons[3::2*(self.n_cp-2)] = ind_v0+2
         
         ptrb_a_cons = np.arange(0,np.size(a_val_a_cons),2,dtype=np.int32)
         ptre_a_cons = np.arange(2,np.size(a_val_a_cons)+1,2,dtype=np.int32)
@@ -367,11 +394,11 @@ class LocalPlanner(object):
         
         # Sparsity pattern for this constraint. See documentation
         a_sub_j_cons = np.zeros(np.size(a_val_j_cons),dtype=np.int32)
-        a_sub_j_cons[0::3*(self.n_cp-3)] = ind_a0
-        a_sub_j_cons[1::3*(self.n_cp-3)] = ind_a0+1
+        a_sub_j_cons[0::2*(self.n_cp-3)] = ind_a0
+        a_sub_j_cons[1::2*(self.n_cp-3)] = ind_a0+1
         
-        ptrb_j_cons = np.arange(0,np.size(a_val_j_cons),3,dtype=np.int32)
-        ptre_j_cons = np.arange(3,np.size(a_val_j_cons)+1,3,dtype=np.int32)
+        ptrb_j_cons = np.arange(0,np.size(a_val_j_cons),2,dtype=np.int32)
+        ptre_j_cons = np.arange(2,np.size(a_val_j_cons)+1,2,dtype=np.int32)
         
         # Constraint is to zero
         self.blc[self.ind_cons_jerk:self.ind_bin_sum] = np.zeros(self.num_jerk)
@@ -385,8 +412,8 @@ class LocalPlanner(object):
         # Simply just ones in a row for each segment's set of binary variables
         a_sub_b_sum = np.arange(self.ind_bin,self.ind_bin+self.num_bin)
         a_val_b_sum = np.ones(self.num_bin)
-        ptrb_b_sum = np.arange(0,self.num_bin,self.n_int)
-        ptre_b_sum = np.arange(self.n_int,self.num_bin+1,self.n_int)
+        ptrb_b_sum = np.arange(0,self.num_bin,self.n_int_max)
+        ptre_b_sum = np.arange(self.n_int_max,self.num_bin+1,self.n_int_max)
         
         # Sum must be at least one
         self.blc[self.ind_bin_sum:(self.ind_bin_sum+self.n_seg)] = np.ones(self.n_seg)
@@ -404,6 +431,10 @@ class LocalPlanner(object):
 
         # Start time
         self.t_start = rospy.get_rostime()
+        self.first_plan = True
+        self.fake_first_plan = True
+        self.fake_t_alloc = 15
+        self.t_start_plan = 0
 
     def __del__(self):
         # Close MOSEK
@@ -411,10 +442,14 @@ class LocalPlanner(object):
         self.msk_env.__del__()
 
     def replan(self):
-        # Get start time for cutting off if we take too long
+        # Get start time for cutting off if we run for too long
         t_replan_start = rospy.get_rostime()
 
-        # REMINDER TO POTENTIALLY ADDRESS THREAD SAFETY
+        if self.fake_first_plan and self.first_plan:
+            self.t_start_plan = t_replan_start.to_sec()
+            self.first_plan = False
+
+        # TODO: May need to consider thread safety
         state_start = copy.deepcopy(self.state)
         global_plan = copy.deepcopy(self.glob_plan)
         cvx_decomp = copy.deepcopy(self.cvx_decomp)
@@ -422,19 +457,26 @@ class LocalPlanner(object):
         # Problem size
         n_int = len(cvx_decomp.polyhedra)
         n_int_glob = len(global_plan.poses)
+        n_glob_last = min(n_int,n_int_glob)
         if not(n_int==n_int_glob):
             rospy.loginfo("Number of polyhedra does not match global path length({}~={})".format(n_int,n_int_glob))
         n_planes = np.zeros(n_int)
         for i in range(n_int):
-            n_planes[i] = len(cvx_decomp.polyhedra[i])
+            n_planes[i] = len(cvx_decomp.polyhedra[i].planes)
         
+
         # Calculate time allocation
         # Calculate minimum time for constant input motions between current and goal states, multiply by adaptive scale factor
         x_0 = np.array([state_start.pos.x,state_start.pos.y,state_start.pos.z])
         v_0 = np.array([state_start.vel.x,state_start.vel.y,state_start.vel.z])
-        x_f = np.array([global_plan.poses[n_int].pose.position.x,
-                        global_plan.poses[n_int].pose.position.y,
-                        global_plan.poses[n_int].pose.position.z])
+        if self.fake_first_plan:
+            x_0 = np.array([global_plan.poses[0].pose.position.x,
+                            global_plan.poses[0].pose.position.y,
+                            global_plan.poses[0].pose.position.z])
+            v_0 = np.zeros(3)
+        x_f = np.array([global_plan.poses[n_glob_last-1].pose.position.x,
+                        global_plan.poses[n_glob_last-1].pose.position.y,
+                        global_plan.poses[n_glob_last-1].pose.position.z])
         v_f = np.zeros(3)
         a_f = np.zeros(3)
         
@@ -444,21 +486,24 @@ class LocalPlanner(object):
                                 np.abs(dv)/self.a_max)))
         
         t_alloc = t_min*self.f
+        if self.fake_first_plan:
+            t_alloc = self.fake_t_alloc
         dT = t_alloc/self.n_seg
 
         # Update bounds and constraints based on parameters for this timestep
         # ICs/BCs via variable bounds
         # Velocity/position at initial condition, p/v/a at final condition (acceleration not defined in fake sim)
-        bkx_ic_bc = [mosek.boundkey.fx]*3*5
-        blx_ic_bc = np.hstack((x_0,v_0,x_f,v_f,a_f))
+        # TODO: Need to get initial acceleration in here somehow. Assume zero as a placeholder for now
+        bkx_ic_bc = [mosek.boundkey.fx]*3*6
+        blx_ic_bc = np.hstack((x_0,v_0,np.array([0,0,0]),x_f,v_f,a_f))
         bux_ic_bc = blx_ic_bc
         b_ind_ic_bc = []
 
-        ic_all = np.vstack((x_0,v_0))
+        ic_all = np.vstack((x_0,v_0,np.array([0,0,0])))
         bc_all = np.vstack((x_f,v_f,a_f))
         # Initial conditions
-        ind_table = [0,self.ind_vel]
-        for i in range(2):
+        ind_table = [0,self.ind_vel,self.ind_accel]
+        for i in range(3):
             for j in range(3):
                 ind_ic = ind_table[i]+j*(self.n_cp-i)
                 b_ind_ic_bc.append(ind_ic)
@@ -477,7 +522,114 @@ class LocalPlanner(object):
         # Put bounds on task
         self.task.putvarboundlist(b_ind_ic_bc,bkx_ic_bc,blx_ic_bc,bux_ic_bc)
 
-        # Velocity/Acceleration/Jerk Consistency - Just need to update
+        # Collision Inequality
+        # Each timestep is a brand new day, do not know what was/wasn't active. Remove all constraints then reenable ones needed
+        # Zero out inequality constraints from last timestep, fix all binary variables to zero
+        a_subj_coll_clear = np.zeros(self.num_coll,dtype=np.int32)
+        a_val_coll_clear = np.zeros(self.num_coll)
+        ptrb_coll_clear = np.arange(self.num_coll,dtype=np.int32)
+        ptre_coll_clear = ptrb_coll_clear+1
+
+        self.task.putarowslice(self.ind_coll,self.ind_cons,ptrb_coll_clear,ptre_coll_clear,
+                                a_subj_coll_clear,a_val_coll_clear)
+        self.task.putconboundslice(self.ind_coll,self.ind_cons,[mosek.boundkey.fr]*self.num_coll,
+                                    np.zeros(self.num_coll),np.zeros(self.num_coll))
+        self.bkc[self.ind_coll:self.ind_cons] = [mosek.boundkey.fr]*self.num_coll
+        self.blc[self.ind_coll:self.ind_cons] = np.zeros(self.num_coll)
+        self.buc[self.ind_coll:self.ind_cons] = np.zeros(self.num_coll)
+
+        self.bkx[self.ind_bin:self.ind_bin+self.num_bin] = [mosek.boundkey.fx]*self.num_bin
+        self.blx[self.ind_bin:self.ind_bin+self.num_bin] = np.zeros(self.num_bin)
+        self.bux[self.ind_bin:self.ind_bin+self.num_bin] = np.zeros(self.num_bin)
+        self.task.putvarboundslice(self.ind_bin,self.ind_bin+self.num_bin,[mosek.boundkey.fx]*self.num_bin,
+                                    np.zeros(self.num_bin),np.zeros(self.num_bin))
+
+        # Now build collision constraints for this timestep
+        # Extract plane coefficients from convex decomposition
+        plane_norms = np.zeros((self.n_int_max,self.n_plane_max,3))
+        plane_coefs = np.zeros((self.n_int_max,self.n_plane_max))
+        plane_present = np.zeros((self.n_int_max,self.n_plane_max))
+        for i in range(len(cvx_decomp.polyhedra)):
+            for j in range(len(cvx_decomp.polyhedra[i].planes)):
+                plane_norms[i,j,:] = cvx_decomp.polyhedra[i].planes[j].coef[0:3]
+                plane_coefs[i,j] = cvx_decomp.polyhedra[i].planes[j].coef[3]
+                plane_present[i,j] = 1
+        coll_rel_row_inds = np.arange(self.n_plane_max*self.n_int_max,dtype=np.int32).reshape(plane_coefs.shape,order='C')
+        coll_bin_rel_col_inds = np.tile(np.arange(self.n_int_max,dtype=np.int32),self.n_plane_max).reshape(plane_coefs.shape,order='F')
+
+        # Extract nonzero coefficients
+        ind_nz = np.nonzero(plane_present)
+        num_coll_actv = np.size(ind_nz[0])*self.n_cp
+        plane_norms_nz_x = plane_norms[ind_nz[0],ind_nz[1],0]
+        plane_norms_nz_y = plane_norms[ind_nz[0],ind_nz[1],1]
+        plane_norms_nz_z = plane_norms[ind_nz[0],ind_nz[1],2]
+        plane_coefs_nz = plane_coefs[ind_nz[0],ind_nz[1]]
+        coll_rel_nz_row_inds = coll_rel_row_inds[ind_nz[0],ind_nz[1]]
+        coll_bin_rel_nz_col_inds = coll_bin_rel_col_inds[ind_nz[0],ind_nz[1]]
+
+        for i in range(self.n_seg):
+            # Loop over curve segments. All control points in each segment must be checked against all planes
+            # along with binary variables to indicate which constraints are active                                 
+            ind_coll_start = self.ind_coll+i*self.num_coll_per_seg
+            ind_coll_end = ind_coll_start + self.num_coll_per_seg
+            
+            # Index row coefficients by running down each block of columns in turn
+            # Requires 4 passes for 3x dimensions + 1x binary variables
+            # TODO: Can probably broadcast this rather than tiling
+            coll_subi = (np.tile(coll_rel_nz_row_inds,(self.n_cp,1))+
+                        np.arange(ind_coll_start,ind_coll_end-1,self.num_planes,dtype=np.int32).reshape((self.n_cp,1))).flatten(order='C')
+            coll_subi_rep = np.tile(coll_subi,4)
+
+            # Column indices need to be repeated num_planes times
+            coll_subj_cps = np.tile(np.arange(i*3*self.n_cp,(i+1)*3*self.n_cp,dtype=np.int32),
+                                    (ind_nz[0].shape[0],1)).flatten(order='F')
+
+            # Column indices of binary coefficients. Stacking order has them along diagonals for each control point
+            coll_subj_bin = np.tile(self.ind_bin+i*self.n_int_max+coll_bin_rel_nz_col_inds,self.n_cp)
+            
+            # Actual coefficients of constraint matrix are based on plane normals
+            coll_a_x = np.tile(plane_norms_nz_x,self.n_cp)
+            coll_a_y = np.tile(plane_norms_nz_y,self.n_cp)
+            coll_a_z = np.tile(plane_norms_nz_z,self.n_cp)
+            
+            # Binary variables just get the M coefficient
+            coll_a_bin = self.coll_M*np.ones(num_coll_actv)
+
+            coll_b = np.tile(plane_coefs_nz,self.n_cp)+self.coll_M
+            
+            # Put the A matrix and RHS
+            # RHS is simply plane coefficients repeated for each control point plus the M coefficient
+            self.task.putaijlist(coll_subi_rep,np.hstack((coll_subj_cps,coll_subj_bin)),
+                            np.hstack((coll_a_x,coll_a_y,coll_a_z,coll_a_bin)))
+            self.task.putconboundlist(coll_subi,[mosek.boundkey.up]*num_coll_actv,
+                                    np.zeros(num_coll_actv),coll_b)
+
+            # Store constraint values and keys for reference
+            # TODO: Had to unvectorize this b/c numpy was complaining. Probably is a way to do it though
+            # self.bkc[coll_subi] = [mosek.boundkey.up]*num_coll_actv
+            # self.buc[coll_subi] = np.tile(plane_coefs_nz,self.n_cp)+self.coll_M
+            for j in range(coll_subi.shape[0]):
+                self.bkc[coll_subi[j]] = [mosek.boundkey.up]
+                self.buc[coll_subi[j]] = coll_b[j]
+
+        
+        # Enable active binary variables, store bounds/keys for reference
+        ind_bin_actv = (np.arange(self.ind_bin,self.ind_bin+self.num_bin,self.n_int_max)
+                        +np.arange(0,n_int).reshape((n_int,1))).flatten(order='F')
+        n_bin_actv = np.size(ind_bin_actv)
+        self.task.putvarboundlist(ind_bin_actv,[mosek.boundkey.ra]*n_bin_actv,
+                                np.zeros(n_bin_actv),np.ones(n_bin_actv))
+        
+        # TODO: Again, unvectorized because of numpy complaining
+        # self.bkx[ind_bin_actv] = [mosek.boundkey.ra]*n_bin_actv
+        # self.blx[ind_bin_actv] = np.zeros(n_bin_actv)
+        # self.bux[ind_bin_actv] = np.ones(n_bin_actv)
+        for i in range(ind_bin_actv.shape[0]):
+            self.bkx[ind_bin_actv[i]] = [mosek.boundkey.ra]
+            self.blx[ind_bin_actv[i]] = 0
+            self.bux[ind_bin_actv[i]] = 1
+
+        # Velocity/Acceleration/Jerk Consistency - Just need to update time values
         # Velocity
         a_val_v_cons = dT*np.ones(self.num_vel)
         a_i_v_cons = np.arange(self.ind_cons_vel,self.ind_cons_accel,dtype=np.int32)
@@ -499,60 +651,120 @@ class LocalPlanner(object):
 
         self.task.putaijlist(a_i_j_cons,a_j_j_cons,a_val_j_cons)
 
-        # Collision Inequality
-        # Extract plane coefficients from convex decomposition
-        plane_norms = np.zeros((self.n_int_max,self.n_plane_max,3))
-        plane_coefs = np.zeros((self.n_int_max,self.n_plane_max))
-        for i in range(len(cvx_decomp.polyhedra)):
-            for j in range(len(cvx_decomp.polyhedra[i].planes)):
-                plane_norms[i,j,0] = cvx_decomp.polyhedra[i].planes[j].a
-                plane_norms[i,j,1] = cvx_decomp.polyhedra[i].planes[j].b
-                plane_norms[i,j,2] = cvx_decomp.polyhedra[i].planes[j].c
-                plane_coefs[i,j] = cvx_decomp.polyhedra[i].planes[j].d
-        coll_rel_row_inds = np.arange(self.n_plane_max*self.n_int_max).reshape(plane_coefs.shape)
+        # Set cost
+        # Quadratic is norm of jerk times dT
+        q_cost_subi = np.arange(self.ind_jerk,self.ind_bin)
+        q_cost_val = 2*dT*np.ones(3*self.n_seg)
+        self.task.putqobj(q_cost_subi,q_cost_subi,q_cost_val)
 
+        # Call solver
+        # TODO: Try some of the stuff here to speed is up:
+        # https://docs.mosek.com/latest/pythonapi/mip-optimizer.html#speeding-up-the-solution-process
+        self.task.optimize()
+        self.task.solutionsummary(mosek.streamtype.log)
+        self.task.optimizersummary(mosek.streamtype.log)
 
-        for i in range(self.n_seg):
-            # Loop over curve segments. All control points in each segment must be checked against all planes
-            # along with binary variables to indicate which constraints are active                                 
-            ind_coll_start = ind_coll+i*num_coll_per_seg
-            ind_coll_end = ind_coll_start + num_coll_per_seg
-            
-            # Index row coefficients by running down each column in turn. Requires 4 passes for all coefficients
-            coll_subi = np.matmul(np.arange(ind_coll_start,ind_coll_end).reshape((num_coll_per_seg,1)),
-                            np.ones((1,4),dtype=np.int32)).flatten(order='F')
-            # Column indices need to be repeated num_planes times
-            coll_subj_cps = np.matmul(np.arange(i*3*n_cp,i*3*n_cp+3*n_cp).reshape((3*n_cp,1)),
-                                np.ones((1,num_planes),dtype=np.int32)).flatten(order='C')
-            # Column indices of binary coefficients. Stacking order has them along diagonals for each control point
-            coll_subj_bin_temp = (np.tile(np.arange(ind_bin+i*n_int,ind_bin+(i+1)*n_int),plane_coefs.shape[1])
-                                .reshape((plane_coefs.shape[1],n_int),order='C'))
-            coll_subj_bin = np.tile(coll_subj_bin_temp.flatten(order='F'),n_cp)
-            
-            # Actual coefficients of constraint matrix are based on plane normals
-            coll_a_x = np.tile(plane_norms[:,:,0].flatten(order='C'),n_cp)
-            coll_a_y = np.tile(plane_norms[:,:,1].flatten(order='C'),n_cp)
-            coll_a_z = np.tile(plane_norms[:,:,2].flatten(order='C'),n_cp)
-            
-            # Binary variables just get the M coefficient
-            coll_a_bin = -M*np.ones(coll_subj_bin.shape[0])
-            
-            # Put the A matrix and RHS
-            # RHS is simply plane coefficients repeated for each control point plus the M coefficient
-            task.putaijlist(coll_subi,np.hstack((coll_subj_cps,coll_subj_bin)),
-                            np.hstack((coll_a_x,coll_a_y,coll_a_z,coll_a_bin)))
-            blc[ind_coll_start:ind_coll_end] = np.tile(plane_coefs.flatten(order='C'),n_cp)-M
+        # Check solution status
+        prosta = self.task.getprosta(mosek.soltype.itg)
+        solsta = self.task.getsolsta(mosek.soltype.itg)
 
-            self.task.putarowslice(self.ind_coll,self.ind_bin,ptrb,ptre,a_sub_j,a_val_coll)
+        soln_bad = (solsta == mosek.solsta.unknown or solsta == mosek.solsta.prim_infeas_cer
+                    or solsta == mosek.solsta.dual_infeas_cer or solsta == mosek.solsta.prim_illposed_cer
+                    or solsta == mosek.solsta.dual_illposed_cer)
         
-        # Update fix inactive binary variables
+        if soln_bad:
+            # Bad exit code. Keep working off of existing solution
+            rospy.loginfo("Bad solver exit status:%s".format(str(solsta)))
+            return
+        
+        if not self.opt_run:
+            self.opt_run = True
 
-        potato = 5
+        # Store solution for use in output
+        # TODO: May need to consider thread safety
+        self.task.getxx(mosek.soltype.itg,self.xx)
+        self.cp_p_opt = self.xx[0:self.ind_vel]
+        self.cp_v_opt = self.xx[self.ind_vel:self.ind_accel]
+        self.cp_a_opt = self.xx[self.ind_accel:self.ind_jerk]
+        self.cp_j_opt = self.xx[self.ind_jerk:self.ind_bin]
+        self.bin_opt = self.xx[self.ind_bin:self.ind_bin + self.num_bin]
+
+        self.t_traj_opt_start = state_start.header.stamp.to_sec()
+        if self.fake_first_plan:
+            self.t_traj_opt_start = self.t_start_plan
+        self.dT_traj_opt = dT
+
+        # Update path for visualization. Interpolate position values along entire length
+        # TODO: Can probably clean the ordering on this one up. Reshape/swap axes works but is confusing
+        p_interp,t_interp = bezier_curve(self.xx[0:self.ind_vel].reshape(self.n_cp,3,self.n_seg,order='F').swapaxes(0,1),
+                                self.dT_traj_opt*np.ones(self.n_seg),num_disc = 20)
+        iden_quat = Quaternion(x=0,y=0,z=0,w=1)
+        new_pose_list = []
+        new_path_header = Header(stamp=rospy.get_rostime,frame_id = self.frame_id)
+        for i in range(p_interp.shape[1]):
+            new_pose_list.append(PoseStamped(new_path_header,Pose(position=Point(x=p_interp[0,i],y=p_interp[1,i],z=p_interp[2,i]),
+                                                            orientation = iden_quat)))
+        self.local_plan = Path(new_path_header,new_pose_list)
 
     def update_goal(self):
-        potato = 5
 
-    def streamprinter(text):
+        if not self.opt_run:
+            return
+
+        # Interpolate local plan at current time
+        t_curr = rospy.get_rostime()
+        t_curr_s = t_curr.to_sec()
+
+        # See if we should update committed trajectory to latest optimal trajectory
+        # TODO: Potentially need to address thread safety here, optimizer could be finishing as this runs
+        if t_curr_s>self.t_traj_opt_start:
+            self.cp_p_comm = self.cp_p_opt
+            self.cp_v_comm = self.cp_v_opt
+            self.cp_a_comm = self.cp_a_opt
+            self.bin_comm = self.bin_opt
+            self.t_traj_comm_start = self.t_traj_opt_start
+            self.dT_traj_comm = self.dT_traj_opt
+
+        goal_p_interp = bezier_interpolate(self.cp_p_comm.reshape(self.n_cp,3,self.n_seg,order='F').swapaxes(0,1),
+                                            self.dT_traj_comm*np.ones(self.n_seg),t_curr_s-self.t_traj_comm_start,n=3)
+        goal_v_interp = bezier_interpolate(self.cp_v_comm.reshape(self.n_cp-1,3,self.n_seg,order='F').swapaxes(0,1),
+                                            self.dT_traj_comm*np.ones(self.n_seg),t_curr_s-self.t_traj_comm_start,n=2)
+        goal_a_interp = bezier_interpolate(self.cp_a_comm.reshape(self.n_cp-2,3,self.n_seg,order='F').swapaxes(0,1),
+                                            self.dT_traj_comm*np.ones(self.n_seg),t_curr_s-self.t_traj_comm_start,n=1)
+        goal_j_interp = bezier_interpolate(self.cp_j_comm.reshape(self.n_cp-3,3,self.n_seg,order='F').swapaxes(0,1),
+                                            self.dT_traj_comm*np.ones(self.n_seg),t_curr_s-self.t_traj_comm_start,n=0)
+
+        # Populate goal message
+        goal_new = Goal()
+        goal_new.p.x = goal_p_interp[0]
+        goal_new.p.y = goal_p_interp[1]
+        goal_new.p.z = goal_p_interp[2]
+        goal_new.v.x = goal_v_interp[0]
+        goal_new.v.y = goal_v_interp[1]
+        goal_new.v.z = goal_v_interp[2]
+        goal_new.a.x = goal_a_interp[0]
+        goal_new.a.y = goal_a_interp[1]
+        goal_new.a.z = goal_a_interp[2]
+        goal_new.j.x = goal_j_interp[0]
+        goal_new.j.y = goal_j_interp[1]
+        goal_new.j.z = goal_j_interp[2]
+
+        # Align yaw with velocity direction
+        # Slap a first order lag filter on it and clamp if speed is below a threshold
+        if abs(goal_v_interp[0])<self.yaw_tol and abs(goal_v_interp[1])<self.yaw_tol:
+            new_yaw_targ = self.yaw_filt_val
+        else:
+            new_yaw_targ = np.arctan2(goal_v_interp[1],goal_v_interp[0])
+        self.yaw_filt_val = self.yaw_filt_coef*new_yaw_targ+(1-self.yaw_filt_coef)*self.yaw_filt_val
+        goal_new.yaw = self.yaw_filt_val
+        
+        goal_new.header = Header(stamp=t_curr,frame_id = self.frame_id)
+
+        rospy.loginfo("Published goal location %s",goal_new.p)
+        
+        self.goal = goal_new
+
+    def streamprinter(self,text):
         # Define a stream printer to grab output from MOSEK
         sys.stdout.write(text)
         sys.stdout.flush()
@@ -592,6 +804,7 @@ class LocalPlanner(object):
             made_up_pose.pose.position.x = 0.4*i
             made_up_pose.pose.position.y = ((0.4*i)**2)*np.sin(2*pi*sine_freq*dt.to_sec())
             made_up_pose.pose.position.z = 0
+            made_up_pose.pose.orientation = Quaternion(x=0,y=0,z=0,w=1)
             pose_list.append(made_up_pose)
         new_path.poses = pose_list
         new_path.header.stamp = curr_time
