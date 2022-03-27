@@ -6,7 +6,7 @@
 	<include file="$(arg my_workspace_path)/src/acl-gazebo/acl_sim/launch/perfect_tracker_and_sim.launch" />
 	
 	<!-- Octomap Launch -->
-	<include file="/opt/ros/melodic/share/octomap_server/octomap_mapper.launch" />
+	<include file="/opt/ros/melodic/share/octomap_server/launch/octomap_mapping.launch" />
 
 	<!-- Mapper Module -->
 	<include file="$(arg my_workspace_path)/src/mapper/launch/octomap_launch.launch" />
@@ -14,10 +14,10 @@
 	<!-- Global Planner Module -->
 	<include file="$(arg my_workspace_path)/src/global_planner/launch/start_global_planner.launch" />
 
-	<!-- Conver Decomposition Module -->
+	<!-- Convex Decomposition Module -->
 	<include file="$(arg my_workspace_path)/src/convex_decomposer/launch/start_convex_decomposition.launch" />
 
 	<!-- Local Planner Module -->
-	<include file="$(arg my_workspace_path)/src/local_planner/launch/start_local_planner.launch" />
+	<!--<include file="$(arg my_workspace_path)/src/local_planner/launch/start_local_planner.launch" />-->
 
 </launch>

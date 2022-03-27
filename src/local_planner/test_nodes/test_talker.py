@@ -15,7 +15,7 @@ from nav_msgs.msg import Path
 from geometry_msgs.msg import Point, Vector3, Quaternion, PoseStamped, Pose
 from shape_msgs.msg import Plane
 from std_msgs.msg import Float64, Header
-from local_planner.msg import CvxDecomp, Polyhedron
+from convex_decomposer.msg import CvxDecomp, Polyhedron
 
 class local_planner_test_talker:
     def __init__(self):
