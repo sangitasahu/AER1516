@@ -97,21 +97,21 @@ class globalPlanner:
     def read_rviz_goal(self,msg):
       rospy.loginfo("New goal!")    
       self.cur_rviz_goal = [msg.pose.position.x,msg.pose.position.y,msg.pose.position.z]
-      rospy.loginfo(self.cur_rviz_goal)
+      #rospy.loginfo(self.cur_rviz_goal)
       self.seq_cntr += 1
       if self.seq_cntr > 100:
         self.seq_cntr = 0
 
     def read_goal(self,msg):
       self.cur_goal = msg.p
-      self.dist_to_goal = self.calc_dist_btw_nodes(self.cur_state, self.cur_goal)
-      rospy.loginfo(self.cur_goal)
+      #self.dist_to_goal = self.calc_dist_btw_nodes(self.cur_state, self.cur_goal,self.MANHATTAN_DIST)
+      #rospy.loginfo(self.cur_goal)
 
     def read_state(self,msg):
-      self.cur_state = msg.pos
+      #self.cur_state = msg.pos
       self.cur_node = [self.cur_state.x,self.cur_state.y, self.cur_state.z, self.NOT_OCCUPIED, self.COST_EMPTY_CELL ]
       self.path_nodes_list.append(self.cur_node)
-      rospy.loginfo(self.cur_state)
+      #rospy.loginfo(self.cur_state)
 
     """Generate the 3D Map from the point clouds containing occupancy and costs (5D array)
 
@@ -145,9 +145,9 @@ class globalPlanner:
 
     def calc_dist_btw_nodes(self,node1, node2, typ):
       if typ == self.MANHATTAN_DIST:
-        dist = math.abs(node2[0] -node1[0]) + math.abs(node2[1] - node1[1]) + math.abs(node2[2] - node1[2])
+        dist = abs(node2[0] -node1[0]) + abs(node2[1] - node1[1]) + abs(node2[2] - node1[2])
       else:
-        dist = (math.abs(node2[0] -node1[0])**2) + (math.abs(node2[1] - node1[1])**2) + (math.abs(node2[2] - node1[2])**2)
+        dist = (abs(node2[0] -node1[0])**2) + (abs(node2[1] - node1[1])**2) + (abs(node2[2] - node1[2])**2)
       return dist
 
     """###Calculate cost between nodes"""
@@ -316,7 +316,7 @@ if __name__ == '__main__':
     rospy.init_node('globalPlanner')
     try:
         globalPlanner_o = globalPlanner()
-        rate = rospy.Rate(1)
+        rate = rospy.Rate(10)
 #Subscribers        
         rospy.Subscriber("/SQ01s/goal" , Goal, globalPlanner_o.read_goal)
         rospy.Subscriber("/SQ01s/state" , State, globalPlanner_o.read_state)
