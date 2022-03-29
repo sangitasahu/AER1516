@@ -8,37 +8,37 @@
 #include <geometry_msgs/Point32.h>
 #include <sensor_msgs/PointCloud.h>
 #include <vector>
-#include <tf/transform_listener.h>
 #include "snapstack_msgs/State.h"
 #include <string>
    
 ros::Publisher pubProb;
 ros::Publisher pubGrid;
 ros::Publisher pubPoints;
-tf::StampedTransform transform;
 snapstack_msgs::State quad_state;
+geometry_msgs::Vector3 quad_pos;
+octomap::point3d  occupancyPoints3d; 
 
 
 void state_callback(const snapstack_msgs::State& state_msg)
 {
     quad_state = state_msg;
-    geometry_msgs::Vector3 quad_pos = quad_state.pos;
 }
 
 void octomap_binary_callback(const octomap_msgs::OctomapConstPtr& octomap_msg)
 {
 
-    geometry_msgs::Vector3 quad_pos = quad_state.pos;
+    quad_pos = quad_state.pos;
     
-    octomap::AbstractOcTree* tree = octomap_msgs::binaryMsgToMap(* octomap_msg);
+    //octomap::AbstractOcTree* tree = octomap_msgs::binaryMsgToMap(* octomap_msg);
 
-    octomap::OcTree* octree = dynamic_cast<octomap::OcTree*>(tree);
+    //octomap::OcTree* octree = dynamic_cast<octomap::OcTree*>(tree);
 
-    int bbx_upper = 5;
+    std::shared_ptr<octomap::OcTree> octree = std::shared_ptr<octomap::OcTree> (dynamic_cast<octomap::OcTree*> (octomap_msgs::msgToMap(* octomap_msg)));
+
+    int bbx_upper = 2;
     int bbx_lower = 0;
     float resolution = 0.1;
     int bsize = static_cast<int>((bbx_upper-bbx_lower)/resolution);
-    octomap::point3d  occupancyPoints3d; 
     octomap::point3d  min_bbx;
     min_bbx.x() = quad_pos.x+bbx_lower;
     min_bbx.y() = quad_pos.y+bbx_lower;
@@ -52,7 +52,6 @@ void octomap_binary_callback(const octomap_msgs::OctomapConstPtr& octomap_msg)
 
     std::vector<_Float32> occupancyProb;
       
-    tf::Vector3 vectorPoints3d;
     geometry_msgs::Point32 point3d;
     sensor_msgs::ChannelFloat32 occupancyChannel;
     std::vector<geometry_msgs::Point32> points3d;
