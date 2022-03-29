@@ -18,6 +18,6 @@
 	<include file="$(arg my_workspace_path)/src/convex_decomposer/launch/start_convex_decomposition.launch" />
 
 	<!-- Local Planner Module -->
-	<!--<include file="$(arg my_workspace_path)/src/local_planner/launch/start_local_planner.launch" />-->
+	<include file="$(arg my_workspace_path)/src/local_planner/launch/start_local_planner.launch" />
 
 </launch>
