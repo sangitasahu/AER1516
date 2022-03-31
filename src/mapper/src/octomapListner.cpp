@@ -12,7 +12,7 @@
 #include <string>
    
 ros::Publisher pubProb;
-ros::Publisher pubGrid;
+//ros::Publisher pubGrid;
 ros::Publisher pubPoints;
 snapstack_msgs::State quad_state;
 geometry_msgs::Vector3 quad_pos;
@@ -37,7 +37,7 @@ void octomap_binary_callback(const octomap_msgs::OctomapConstPtr& octomap_msg)
 
     int bbx_upper = 2;
     int bbx_lower = 0;
-    float resolution = 0.1;
+    float resolution = 0.5;
     int bsize = static_cast<int>((bbx_upper-bbx_lower)/resolution);
     octomap::point3d  min_bbx;
     min_bbx.x() = quad_pos.x+bbx_lower;
@@ -57,7 +57,7 @@ void octomap_binary_callback(const octomap_msgs::OctomapConstPtr& octomap_msg)
     std::vector<geometry_msgs::Point32> points3d;
     std::vector<sensor_msgs::ChannelFloat32> occupancyChannels;
 
-    std::vector<std::vector<std::vector<int>>> grid(bsize,std::vector<std::vector<int>>(bsize,std::vector<int>(bsize)));
+    //std::vector<std::vector<std::vector<int>>> grid(bsize,std::vector<std::vector<int>>(bsize,std::vector<int>(bsize)));
 
 
     for(octomap::OcTree::leaf_bbx_iterator it = octree->begin_leafs_bbx(min_bbx,max_bbx), end = octree->end_leafs_bbx(); it!= end; ++it)
@@ -73,9 +73,9 @@ void octomap_binary_callback(const octomap_msgs::OctomapConstPtr& octomap_msg)
         int z_index = int((occupancyPoints3d.z()-(quad_pos.z+0.05))/resolution);
 
 
-        if(it->getOccupancy()>0.5){
-            grid[x_index][y_index][z_index]=1;
-        }
+        //if(it->getOccupancy()>0.5){
+        //    grid[x_index][y_index][z_index]=1;
+        //}
 
         points3d.push_back(point3d);
 
@@ -98,7 +98,7 @@ void octomap_binary_callback(const octomap_msgs::OctomapConstPtr& octomap_msg)
     pubProb.publish(occupancy_info); 
 
     // 3d occupancy grid
-    std_msgs::Int32MultiArray dat;
+/*    std_msgs::Int32MultiArray dat;
 
     dat.layout.dim.push_back(std_msgs::MultiArrayDimension());
     dat.layout.dim.push_back(std_msgs::MultiArrayDimension());
@@ -124,6 +124,7 @@ void octomap_binary_callback(const octomap_msgs::OctomapConstPtr& octomap_msg)
     dat.data = vec;
 
     pubGrid.publish(dat);
+    */
     
 }
 
@@ -139,7 +140,7 @@ int main(int argc, char **argv)
     ros::NodeHandle gridNode;
     ros::NodeHandle points;
     pubProb = occupancyProbability.advertise<sensor_msgs::PointCloud>("probability_publisher",1000);
-    pubGrid = gridNode.advertise<std_msgs::Int32MultiArray>("grid_publisher",1000);
+    //pubGrid = gridNode.advertise<std_msgs::Int32MultiArray>("grid_publisher",1000);
 
     ros::spin();    
 }

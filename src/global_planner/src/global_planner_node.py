@@ -5,9 +5,9 @@ import rospy
 from snapstack_msgs.msg import Goal, State
 from geometry_msgs.msg import PoseStamped, Vector3
 from nav_msgs.msg import Path
-from sensor_msgs.msg import PointCloud, ChannelFloat32
-from std_msgs.msg import Header, Int32MultiArray
+from std_msgs.msg import Header, Int32MultiArray, MultiArrayLayout
 import random
+import time
 
 # Node : (x, y, z, occ_sts, cost)
 # PointCloud : (x, y, z), ChannelFloat32 : occupancy info
@@ -20,18 +20,22 @@ import random
 #
 class globalPlanner:
     def __init__(self):
-	#self.timer = rospy.Timer(rospy.Duration(0.5), self.pub_spin)
         #Constants
         self.DIAGONAL = 1
         self.STRAIGHT = 2
-        self.BB_WIDTH = 5
+        self.BB_BOX_DIST = 2
+        self.RESOLUTION = 0.5
+        self.BB_WIDTH = int(self.BB_BOX_DIST/self.RESOLUTION)
         self.EUCLIDEAN_DIST = 1
         self.MANHATTAN_DIST = 0
         self.INFINITE_COST = 1000
         self.OCCUPIED = 1
         self.NOT_OCCUPIED = 0
-        self.GRID_WIN_WIDTH = 3 #Keep it even
-        self.D_LIMIT = math.floor((self.BB_WIDTH - 1)/2)
+        self.GRID_WIN_WIDTH = 3 
+        self.stride_z = 4
+        self.stride_y = 16
+        self.stride_x = 64
+        self.D_LIMIT = int(math.floor(self.BB_WIDTH/2))
         self.X_LIMIT = [0 , self.BB_WIDTH]
         self.Y_LIMIT = [-self.D_LIMIT,    self.D_LIMIT]
         self.Z_LIMIT = [-self.D_LIMIT,    self.D_LIMIT]
@@ -47,27 +51,26 @@ class globalPlanner:
         self.move = self.STRAIGHT #Can be straight or diagonal
         self.nxt_move_num = 0 #Move number
         self.num_of_cells = 0 
-        self.cur_goal = Vector3()
+        self.cur_goal = Goal()
         self.cur_state = Vector3()
         self.cur_node = []
         self.new_nodes = []
-        self.map_points = PointCloud()
-        self.occupancy_sts = ChannelFloat32()
-        self.occupancy_sts.name = 'occupancy probability'
+        self.occupancy_sts = []
         self.global_path = Path()
         self.path_nodes_list = []
         self.map3D =[]
         self.seq_cntr = 0
         self.stop_jps = 0
-
+        self.cntr = 0
+        self.start = 0
+        self.end = 0
+        self.map_layout = MultiArrayLayout()
+        self.debug_en = False
+        
+      
         #Publishers
         self.global_path_pub = rospy.Publisher('global_plan', Path, queue_size=100)
-    	
-	#Subscribers        
-        #rospy.Subscriber("/SQ01s/goal" , Goal, self.read_goal)
-        #rospy.Subscriber("/SQ01s/state" , State, self.read_state)
-        #rospy.Subscriber("probability_publisher" , PointCloud, self.read_map)
-        #rospy.Subscriber("/move_base_simple/goal", PoseStamped, self.read_rviz_goal)
+        self.goal_pub = rospy.Publisher('/SQ01s/goal', Goal, queue_size=100)
        
         #Offsets
         self.neigh_cell_num_dict = {
@@ -94,49 +97,59 @@ class globalPlanner:
 
     """#Read the goal and State"""
 
-    def read_rviz_goal(self,msg):
-      rospy.loginfo("New goal!")    
-      self.cur_rviz_goal = [msg.pose.position.x,msg.pose.position.y,msg.pose.position.z]
-      #rospy.loginfo(self.cur_rviz_goal)
-      self.seq_cntr += 1
-      if self.seq_cntr > 100:
-        self.seq_cntr = 0
-
-    def read_goal(self,msg):
-      self.cur_goal = msg.p
-      #self.dist_to_goal = self.calc_dist_btw_nodes(self.cur_state, self.cur_goal,self.MANHATTAN_DIST)
-      #rospy.loginfo(self.cur_goal)
+    def read_rviz_goal(self,msg):        
+      self.cur_goal = [msg.pose.position.x,msg.pose.position.y,msg.pose.position.z]
+      rospy.loginfo(self.cur_goal)
+      if self.debug_en:
+        rospy.loginfo("New goal!")  
+      self.dist_to_goal = self.calc_dist_btw_nodes(self.cur_state, self.cur_goal,self.MANHATTAN_DIST)
 
     def read_state(self,msg):
-      #self.cur_state = msg.pos
+      self.cntr += 1
+      self.cur_state = msg.pos
       self.cur_node = [self.cur_state.x,self.cur_state.y, self.cur_state.z, self.NOT_OCCUPIED, self.COST_EMPTY_CELL ]
       self.path_nodes_list.append(self.cur_node)
-      #rospy.loginfo(self.cur_state)
+      if self.debug_en:
+        rospy.loginfo(self.cntr)
+        rospy.loginfo(self.cur_state)
+      self.start = time.time()
 
     """Generate the 3D Map from the point clouds containing occupancy and costs (5D array)
 
-    ###Read the 3D grid
-    """
+    ###Read the nulti-array and generate the 3D Map"""
 
-    def read_map(self,pointClouds):
-      self.map_points.points = pointClouds.points
-      self.occupancy_sts.values = pointClouds.channels[0].values    
-
-      #self.map3D = self.generate_map_3D()
-
-    """###Convert from Point to list"""
-
-    def p2n(point):
-      return [point.x, point.y, point.z]
+    def generate_map_3D(self,map):
+      self.map3D = []
+      self.stride_x = map.layout.dim[0].stride
+      self.stride_y = map.layout.dim[1].stride
+      self.stride_z = map.layout.dim[2].stride
+      rospy.loginfo(len(map.data))
+      rospy.loginfo(self.stride_x)
+      rospy.loginfo(self.stride_y)
+      for i in range(0, len(map.data)): 
+            node = self.state_from_num(i)
+            occ_sts = map.data[i]
+            cell_cost = self.get_cell_cost(node,occ_sts)
+            self.map3D.append([node[0], node[1], node[2], occ_sts,cell_cost])
+      rospy.loginfo("Length is ")
+      rospy.loginfo(len(self.map3D))
+     
+      
+    """###Convert numbers to states""" 
+    def state_from_num(self, num):
+       x = self.cur_state.x + self.RESOLUTION*(num % self.stride_x)
+       y = self.cur_state.y + self.RESOLUTION*(num % self.stride_y)
+       z = self.cur_state.z + self.RESOLUTION*(num % self.stride_z)
+       return [x,y,z]
 
     """###Calculate cell cost"""
 
     def get_cell_cost(self, node, occ_sts):
       if occ_sts:
         return self.COST_OCCUPIED_CELL
-      elif (node[0]==self.D_LIMIT[1]) or (node[1]==self.X_LIMIT[0] or node[1]==self.D_LIMIT[1]) or (node[2]==self.X_LIMIT[0] or node[2]==self.D_LIMIT[1]):
+      elif (node[0]==self.X_LIMIT[1]) or (node[1]==self.Y_LIMIT[0] or node[1]==self.Y_LIMIT[1]) or (node[2]==self.Z_LIMIT[0] or node[2]==self.Z_LIMIT[1]):
         return self.COST_WALL
-      elif (node == self.p2n(self.cur_goal)):
+      elif (node == self.cur_goal):
         return self.COST_GOAL
       else:
         return self.COST_EMPTY_CELL
@@ -162,29 +175,6 @@ class globalPlanner:
       occ_sts = self.get_occupancy_sts(new_node)
       cell_cost = self.get_cell_cost(new_node,occ_sts)
       return [new_node[0], new_node[0] , new_node[2], occ_sts, cell_cost]
-
-    """###Get the occupancy status"""
-
-    def get_occupancy_sts(self,node):
-      node_idx = 0
-      occ_sts = self.OCCUPIED #For nodes not in the map, the status is OCCUPIED
-      for point in self.map_points.points:
-        if point == node[0:2]:
-          occ_sts = self.occupancy_sts.values[node_idx] 
-      return occ_sts
-
-    """###Generate the 3D Map"""
-
-    def generate_map_3D(self):
-      self.map = []
-      for k in range(self.Z_LIMIT[0], self.Z_LIMIT[1]): 
-        for j in range(self.Y_LIMIT[0], self.D_LIMIT[1]):
-          for i in range(self.X_LIMIT[0], self.X_LIMIT[1]):
-            node = [self.cur_node[0] + i, self.cur_node[1] + j, self.cur_node[1] + k ]
-            occ_sts = self.get_occupancy_sts(node)
-            cell_cost = self.get_cell_cost(node,occ_sts)
-            self.map.append([node[0], node[1], node[2], occ_sts,cell_cost])
-      return self.map
 
     """#Decide the next move(Access the 17 cells in the front)"""
 
@@ -269,7 +259,7 @@ class globalPlanner:
         if len(next_jump_nodes) > 1 :
           self.path_nodes_list.append(self.cur_node)
           self.cur_state = nxt_state
-        elif next_jump_nodes[0]== self.p2n(self.cur_goal):
+        elif next_jump_nodes[0]== self.cur_goal:
           self.cur_state = self.cur_goal
           break
         else:
@@ -278,12 +268,13 @@ class globalPlanner:
     def fill_dummy_path(self):
       self.path_nodes_list = []
       for i in range(0,4):
-          self.path_nodes_list.append([random.uniform(0,2)*i, random.uniform(-1,1)*i, random.uniform(0,1)*i])
-		#self.path_nodes_list.append([0.75*i, 1.2*i, 0.5*i])
+          #self.path_nodes_list.append([random.uniform(0,2)*i, random.uniform(-1,1)*i, random.uniform(0,1)*i])
+		      self.path_nodes_list.append([0.05*self.seq_cntr*i, 0.02*self.seq_cntr*i, 0.001*self.seq_cntr*i])
 
     """#Publish the Path"""
 
-    def publish_global_path(self):            
+    def publish_global_path(self):
+      self.seq_cntr += 1            
       self.header.seq = self.seq_cntr
       self.header.stamp = rospy.Time.now()
       self.header.frame_id = 'world'
@@ -305,9 +296,20 @@ class globalPlanner:
         node_pose.header.frame_id = 'world'
         pose_list.append(node_pose)
         i += 1
+        if i==3:
+          self.cur_goal.p.x = path_node[0]
+          self.cur_goal.p.y = path_node[1]
+          self.cur_goal.p.z = path_node[2]
+          self.cur_goal.v.x = 2.5
+          self.cur_goal.yaw = 0.1
+          self.cur_goal.header = self.header
       self.global_nodes_path.header= self.header
       self.global_nodes_path.poses = pose_list
       self.global_path_pub.publish(self.global_nodes_path)
+      self.goal_pub.publish(self.cur_goal)
+      self.end = time.time()
+      if self.debug_en:
+        rospy.loginfo(self.end -  self.start)
 
 
 """#Main module"""
@@ -316,11 +318,10 @@ if __name__ == '__main__':
     rospy.init_node('globalPlanner')
     try:
         globalPlanner_o = globalPlanner()
-        rate = rospy.Rate(10)
+        rate = rospy.Rate(100)
 #Subscribers        
-        rospy.Subscriber("/SQ01s/goal" , Goal, globalPlanner_o.read_goal)
         rospy.Subscriber("/SQ01s/state" , State, globalPlanner_o.read_state)
-        rospy.Subscriber("probability_publisher" , PointCloud, globalPlanner_o.read_map)
+        rospy.Subscriber("grid_publisher" , Int32MultiArray, globalPlanner_o.generate_map_3D)
         rospy.Subscriber("/move_base_simple/goal", PoseStamped, globalPlanner_o.read_rviz_goal)
         while (not rospy.is_shutdown()):
           globalPlanner_o.publish_global_path()
