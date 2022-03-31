@@ -34,9 +34,9 @@ float round_val(float var){
 std::vector<geometry_msgs::Point32> grid_point_gen(geometry_msgs::Point32 offset_point, octomap::point3d  min_bbx, octomap::point3d  max_bbx, float resolution){    
     geometry_msgs::Point32 grid3d;
     std::vector<geometry_msgs::Point32> grids3d;
-    for(float i = min_bbx.z()+offset_point.z; i<=max_bbx.z()+offset_point.z; i=i+resolution){
-        for(float j = min_bbx.y()+offset_point.y; j<=max_bbx.y()+offset_point.y; j=j+resolution){
-            for(float k=min_bbx.x()+offset_point.x; k<=max_bbx.x()+offset_point.x; k=k+resolution){
+    for(float i = min_bbx.z(); i<=max_bbx.z(); i=i+resolution){
+        for(float j = min_bbx.y(); j<=max_bbx.y(); j=j+resolution){
+            for(float k=min_bbx.x(); k<=max_bbx.x(); k=k+resolution){
                 grid3d.x = k;
                 grid3d.y = j;
                 grid3d.z = i;
@@ -66,13 +66,13 @@ void octomap_binary_callback(const octomap_msgs::OctomapConstPtr& octomap_msg)
     float resolution = 0.5;
     //int bsize = static_cast<int>((bbx_upper-bbx_lower)/resolution);
     octomap::point3d  min_bbx;
-    min_bbx.x() = round_val(quad_pos.x);
-    min_bbx.y() = round_val(quad_pos.y)-bbx_range/2;
-    min_bbx.z() = round_val(quad_pos.z)-bbx_range/2;
+    min_bbx.x() = round_val(quad_pos.x)+0.25;
+    min_bbx.y() = round_val(quad_pos.y)+0.25-bbx_range/2;
+    min_bbx.z() = round_val(quad_pos.z)+0.25-bbx_range/2;
     octomap::point3d  max_bbx;
-    max_bbx.x() = round_val(quad_pos.x)+bbx_range;
-    max_bbx.y() = round_val(quad_pos.y)+bbx_range/2;
-    max_bbx.z() = round_val(quad_pos.z)+bbx_range/2; 
+    max_bbx.x() = round_val(quad_pos.x)+0.25+bbx_range;
+    max_bbx.y() = round_val(quad_pos.y)+0.25+bbx_range/2;
+    max_bbx.z() = round_val(quad_pos.z)+0.25+bbx_range/2; 
 
     geometry_msgs::Point32 grid3d; 
     std::vector<geometry_msgs::Point32> grids3d; 
@@ -106,9 +106,9 @@ void octomap_binary_callback(const octomap_msgs::OctomapConstPtr& octomap_msg)
         point3d.z = round_val(point3d.z);
 
         if(tree_index==1){
-            offset3d.x = point3d.x-quad_pos.x;
-            offset3d.y = point3d.y-quad_pos.y;
-            offset3d.z = point3d.z-quad_pos.z;
+            offset3d.x = quad_pos.x+0.25;
+            offset3d.y = quad_pos.y+0.25;
+            offset3d.z = quad_pos.z+0.25;
             grids3d = grid_point_gen(offset3d,min_bbx,max_bbx,resolution);
             gridOccupancy.resize(grids3d.size(), 0.);
         }
