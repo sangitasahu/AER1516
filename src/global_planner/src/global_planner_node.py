@@ -5,7 +5,8 @@ import rospy
 from snapstack_msgs.msg import Goal, State
 from geometry_msgs.msg import PoseStamped, Vector3
 from nav_msgs.msg import Path
-from std_msgs.msg import Header, Int32MultiArray, MultiArrayLayout
+from sensor_msgs.msg import PointCloud, ChannelFloat32
+from std_msgs.msg import Header
 import random
 import time
 
@@ -48,7 +49,7 @@ class globalPlanner:
         #Variables
         self.header = Header()
         self.global_nodes_path = Path()
-        self.move = self.STRAIGHT #Can be straight or diagonal
+        self.nxt_move = self.STRAIGHT #Can be straight or diagonal
         self.nxt_move_num = 0 #Move number
         self.num_of_cells = 0 
         self.cur_goal = Goal()
@@ -58,13 +59,14 @@ class globalPlanner:
         self.occupancy_sts = []
         self.global_path = Path()
         self.path_nodes_list = []
-        self.map3D =[]
+        self.map_points = PointCloud()
+        self.occupancy_sts = ChannelFloat32()
+        self.occupancy_sts.name = 'grid occupancy'
         self.seq_cntr = 0
         self.stop_jps = 0
         self.cntr = 0
         self.start = 0
         self.end = 0
-        self.map_layout = MultiArrayLayout()
         self.debug_en = False
         
       
@@ -115,32 +117,30 @@ class globalPlanner:
       self.start = time.time()
 
     """Generate the 3D Map from the point clouds containing occupancy and costs (5D array)
-
+    
     ###Read the nulti-array and generate the 3D Map"""
 
-    def generate_map_3D(self,map):
-      self.map3D = []
-      self.stride_x = map.layout.dim[0].stride
-      self.stride_y = map.layout.dim[1].stride
-      self.stride_z = map.layout.dim[2].stride
-      rospy.loginfo(len(map.data))
-      rospy.loginfo(self.stride_x)
-      rospy.loginfo(self.stride_y)
-      for i in range(0, len(map.data)): 
-            node = self.state_from_num(i)
-            occ_sts = map.data[i]
-            cell_cost = self.get_cell_cost(node,occ_sts)
-            self.map3D.append([node[0], node[1], node[2], occ_sts,cell_cost])
-      rospy.loginfo("Length is ")
-      rospy.loginfo(len(self.map3D))
-     
-      
-    """###Convert numbers to states""" 
-    def state_from_num(self, num):
-       x = self.cur_state.x + self.RESOLUTION*(num % self.stride_x)
-       y = self.cur_state.y + self.RESOLUTION*(num % self.stride_y)
-       z = self.cur_state.z + self.RESOLUTION*(num % self.stride_z)
-       return [x,y,z]
+    def read_map(self,pointClouds):
+      self.map_points.points = pointClouds.points
+      self.occupancy_sts.values = pointClouds.channels[0].values
+      #rospy.loginfo(len(pointClouds.points))
+      self.generate_map_3D()
+
+    """###Internal map"""
+    def generate_map_3D(self):
+      self.map = []
+      for i in range(0,len(self.map_points.points)):
+        node = self.p2n(self.map_points.points[i])
+        occ_sts = self.occupancy_sts.values[i]
+        cell_cost = self.get_cell_cost(node,occ_sts)
+        self.map.append([node[0], node[1], node[2], occ_sts,cell_cost])
+      if len(self.map) == 27:
+        self.get_next_state()
+
+    """###Point to Node conversion"""
+
+    def p2n(self,point):
+      return [point.x, point.y, point.z]
 
     """###Calculate cell cost"""
 
@@ -154,27 +154,55 @@ class globalPlanner:
       else:
         return self.COST_EMPTY_CELL
 
-    """###Calculate distance between nodes"""
+    """#Add final jump points"""
 
-    def calc_dist_btw_nodes(self,node1, node2, typ):
-      if typ == self.MANHATTAN_DIST:
-        dist = abs(node2[0] -node1[0]) + abs(node2[1] - node1[1]) + abs(node2[2] - node1[2])
+    def get_next_state(self):
+      count = 0      
+      self.path_nodes_list = []
+      while (count < self.BB_WIDTH):
+        count += 1
+        nxt_state = self.select_move()
+        next_jump_nodes = self.get_neighbours(nxt_state, self.nxt_move_num)
+        if len(next_jump_nodes) > 1 :
+          print("Len =",len(next_jump_nodes) )
+          self.path_nodes_list.append(self.cur_node)
+          self.cur_state = nxt_state
+        elif next_jump_nodes[0]== self.cur_goal:
+          self.cur_state = self.cur_goal
+          break
+        else:
+          self.cur_state = next_jump_nodes[0]
+
+    """#Get neighbours for the next node"""
+
+    def get_neighbours(self,nxt_node, move_num):    
+      neighbours = []
+      obstacles_sts = False
+      #Add the next probable state to the neighbours list and prune nodes around it        
+      cell_nums = self.neigh_cell_num_dict.get(move_num)
+      node = None
+      if self.nxt_move == self.STRAIGHT:
+            forced_node = None
+            for cell_num in cell_nums:
+              node = self.map[cell_num]              
+              if node[4] == self.OCCUPIED:
+                dist = self.calc_cost_btw_nodes(self.cur_node, node)
+                if dist == 3 and obstacles_sts==False:
+                   neighbours.append(self.move_node_by_offset(node,[-1,0,0,0,0]))
+                elif dist == 2:
+                   forced_node = node
+                   obstacles_sts = True
+                   break
+              else:
+                 if obstacles_sts == True and forced_node != None:
+                     dist_o = self.calc_cost_btw_nodes(node, forced_node)
+                     if dist_o == 1:
+                         neighbours.append(node)
       else:
-        dist = (abs(node2[0] -node1[0])**2) + (abs(node2[1] - node1[1])**2) + (abs(node2[2] - node1[2])**2)
-      return dist
+        pass
+      neighbours.append(nxt_node)  
+      return neighbours
 
-    """###Calculate cost between nodes"""
-
-    def calc_cost_btw_nodes(self,node1, node2):
-                return node1[4] + self.calc_dist_btw_nodes(node1, node2, self.MANHATTAN_DIST) + node2[4]
-
-    """###Move the node by an offset"""
-
-    def move_node_by_offset(self, node, offset):
-      new_node = [node[0]+offset[0], node[1]+offset[0] , node[2]+offset[2], 0,0]
-      occ_sts = self.get_occupancy_sts(new_node)
-      cell_cost = self.get_cell_cost(new_node,occ_sts)
-      return [new_node[0], new_node[0] , new_node[2], occ_sts, cell_cost]
 
     """#Decide the next move(Access the 17 cells in the front)"""
 
@@ -199,6 +227,7 @@ class globalPlanner:
 
       node_c = self.cur_node[0:2]; 
       move_num = 0
+      next_node = node_c
       for offset in offsets:
         move_num += 1
         node_s = node_c + offset
@@ -210,66 +239,52 @@ class globalPlanner:
             self.nxt_move_num = move_num
             next_node = node_s
 
-      if self.move_type < 6:
+      if self.nxt_move_num < 6:
         self.nxt_move = self.STRAIGHT
       else:
         self.nxt_move = self.DIAGONAL
 
       return next_node
 
-    """#Get neighbours for the next node"""
+    """###Move the node by an offset"""  
+    def move_node_by_offset(self, node, offset):
+      new_node = [node[0]+offset[0], node[1]+offset[0] , node[2]+offset[2], 0,0]
+      occ_sts = self.get_occupancy_sts(new_node)
+      cell_cost = self.get_cell_cost(new_node,occ_sts)
+      return [new_node[0], new_node[0] , new_node[2], occ_sts, cell_cost]
 
-    def get_neighbours(self,nxt_node, move_num):    
-      neighbours = []
-      obstacles_sts = False
-      #Add the next probable state to the neighbours list and prune nodes around it        
-      cell_nums = self.neigh_cell_num_dict.get(move_num)
-      node = None
-      if self.move == self.STRAIGHT:
-            forced_node = None
-            for cell_num in cell_nums:
-              node = self.map[cell_num]
-              if node[4] == self.OCCUPIED:
-                dist = self.calc_cost_btw_nodes(self.cur_node, node)
-                if dist == 3 and obstacles_sts==False:
-                   neighbours.append(self.move_node_by_offset(node,[-1,0,0,0,0]))
-                elif dist == 2:
-                   forced_node = node
-                   obstacles_sts = True
-                   break
-              else:
-                 if obstacles_sts == True and forced_node != None:
-                     dist_o = self.calc_cost_btw_nodes(node, forced_node)
-                     if dist_o == 1:
-                         neighbours.append(node)
+
+    """###Check Occupancy status"""
+    def get_occupancy_sts(self,node):
+      node_idx = 0
+      occ_sts = self.OCCUPIED #For nodes not in the map, the status is OCCUPIED
+      for point in self.map_points.points:
+        if self.p2n(point) == node[0:2]:
+          occ_sts = self.occupancy_sts.values[node_idx] 
+        node_idx += 1
+      return occ_sts
+
+
+    """###Calculate distance between nodes"""
+
+    def calc_dist_btw_nodes(self,node1, node2, typ):
+      if typ == self.MANHATTAN_DIST:
+        dist = abs(node2[0] -node1[0]) + abs(node2[1] - node1[1]) + abs(node2[2] - node1[2])
       else:
-        pass
-      neighbours.append(nxt_node)  
-      return neighbours
+        dist = (abs(node2[0] -node1[0])**2) + (abs(node2[1] - node1[1])**2) + (abs(node2[2] - node1[2])**2)
+      return dist
 
-    """#Add final jump points"""
+    """###Calculate cost between nodes"""
 
-    def get_next_state(self):
-      count = 0
-      self.path_nodes_list = []
-      while (count < self.BB_WIDTH):
-        count += 1
-        nxt_state = self.select_move()
-        next_jump_nodes = self.get_neighbours(nxt_state)
-        if len(next_jump_nodes) > 1 :
-          self.path_nodes_list.append(self.cur_node)
-          self.cur_state = nxt_state
-        elif next_jump_nodes[0]== self.cur_goal:
-          self.cur_state = self.cur_goal
-          break
-        else:
-          self.cur_state = next_jump_nodes[0]
+    def calc_cost_btw_nodes(self,node1, node2):
+                return node1[4] + self.calc_dist_btw_nodes(node1, node2, self.MANHATTAN_DIST) + node2[4]
 
     def fill_dummy_path(self):
       self.path_nodes_list = []
       for i in range(0,4):
-          #self.path_nodes_list.append([random.uniform(0,2)*i, random.uniform(-1,1)*i, random.uniform(0,1)*i])
-		      self.path_nodes_list.append([0.05*self.seq_cntr*i, 0.02*self.seq_cntr*i, 0.001*self.seq_cntr*i])
+        cntr = self.seq_cntr
+        if cntr < 1000:
+          self.path_nodes_list.append([0.05*cntr*i, 0.02*cntr*i, 0.001*cntr*i])
 
     """#Publish the Path"""
 
@@ -321,7 +336,7 @@ if __name__ == '__main__':
         rate = rospy.Rate(100)
 #Subscribers        
         rospy.Subscriber("/SQ01s/state" , State, globalPlanner_o.read_state)
-        rospy.Subscriber("grid_publisher" , Int32MultiArray, globalPlanner_o.generate_map_3D)
+        rospy.Subscriber("grid_publisher" , PointCloud, globalPlanner_o.read_map)
         rospy.Subscriber("/move_base_simple/goal", PoseStamped, globalPlanner_o.read_rviz_goal)
         while (not rospy.is_shutdown()):
           globalPlanner_o.publish_global_path()
