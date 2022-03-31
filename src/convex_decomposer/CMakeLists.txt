@@ -16,7 +16,7 @@ find_package(catkin REQUIRED COMPONENTS
 
 )
 
-## System dependencies are found with CMake's conventions
+## System dependencies are found with CMake's conventions-check
 # find_package(Boost REQUIRED COMPONENTS system)
 
 
