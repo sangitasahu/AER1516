@@ -21,7 +21,7 @@ from bezier_curves import bezier_curve, bezier_interpolate
 # Import message types
 from nav_msgs.msg import Path
 from snapstack_msgs.msg import State, Goal
-from geometry_msgs.msg import Point, Vector3, Quaternion, PoseStamped, Pose
+from geometry_msgs.msg import Point, PointStamped, Vector3, Quaternion, PoseStamped, Pose
 from shape_msgs.msg import Plane
 from std_msgs.msg import Float64, Header
 from convex_decomposer.msg import CvxDecomp, Polyhedron
@@ -35,7 +35,7 @@ class LocalPlanner(object):
         self.state = State()
         self.glob_plan = Path()
         self.cvx_decomp = CvxDecomp()
-        self.global_goal = Point()
+        self.global_goal = PointStamped()
 
         # Outputs
         self.goal = Goal()
