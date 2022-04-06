@@ -41,7 +41,7 @@ class local_planner_test_talker:
                                  [-15,-3]])
 
         # 2 point problem
-        ic_p = np.array([0,0,0])
+        ic_p = np.array([0,0,3])
         bc_p = np.array([20,20,5])
         self.positions = np.array([ic_p,bc_p])
 
