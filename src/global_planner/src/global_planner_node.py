@@ -25,6 +25,7 @@ class globalPlanner:
         self.DIAGONAL = 1
         self.STRAIGHT = 2
         self.BB_BOX_DIST = 2
+        self.STOP_DISTANCE = 1.414
         self.RESOLUTION = 0.5
         self.BB_WIDTH = int(self.BB_BOX_DIST/self.RESOLUTION)
         self.EUCLIDEAN_DIST = 1
@@ -52,8 +53,11 @@ class globalPlanner:
         self.nxt_move = self.STRAIGHT #Can be straight or diagonal
         self.nxt_move_num = 0 #Move number
         self.num_of_cells = 0 
-        self.cur_goal = Goal()
+        self.cur_goal = [29,30,5]
+        self.nxt_goal = Goal()
+        self.proj_cur_goal = [0,0,0]
         self.cur_state = [0,0,0]
+        self.goal_cell = 0
         self.cur_node = []
         self.new_nodes = []
         self.occupancy_sts = []
@@ -133,15 +137,19 @@ class globalPlanner:
       rospy.loginfo(self.cur_goal)
       if self.debug_en:
         rospy.loginfo("New goal!")  
-      self.dist_to_goal = self.calc_dist_btw_nodes(self.cur_state, self.cur_goal,self.MANHATTAN_DIST)
-
+      
     def read_state(self,msg):
       self.cntr += 1
       self.cur_state = [msg.pos.x,msg.pos.y, msg.pos.z]
-      if self.debug_en:
-        rospy.loginfo(self.cntr)
-        rospy.loginfo(self.cur_state)
-      self.start = time.time()
+      d_to_goal = self.calc_dist_btw_nodes(self.cur_state, self.cur_goal,self.EUCLIDEAN_DIST)
+      #print("Cur distance to goal", d_to_goal,self.cur_state  )
+      if d_to_goal < self.STOP_DISTANCE:
+        self.stop_jps = 1
+        print("Reached the goal")
+      else:
+        if self.debug_en:
+          rospy.loginfo(self.cntr)
+          rospy.loginfo(self.cur_state)      
 
     """Generate the 3D Map from the point clouds containing occupancy and costs (5D array)
     
@@ -151,41 +159,73 @@ class globalPlanner:
       self.map_points.points = pointClouds.points
       self.occupancy_sts.values = pointClouds.channels[0].values
       self.grid = pointClouds.channels[0].values
-      rospy.loginfo(len(pointClouds.points))
-      if len(pointClouds.points) == 27:        
-        self.get_next_state()
+      self.num_of_cells = len(pointClouds.points)
+      if self.stop_jps == 0:
+        self.proj_cur_goal = self.get_projected_goal()
+        self.start = time.time()
+        if len(pointClouds.points) == 27: 
+          print("Searching with JPS...")       
+          self.get_next_state()
+        else:
+          rospy.loginfo(len(pointClouds.points))
+          print("length of grid received is not 27")
+
+    """###Get projected goal for current JPS iteration"""
+    def get_projected_goal(self):
+      min_d_goal = 1000
+      for i in range(0, self.num_of_cells):
+        cur_point = [self.map_points.points[i].x, self.map_points.points[i].y, self.map_points.points[i].z]
+        if self.occupancy_sts.values[i] == self.NOT_OCCUPIED:
+          d_goal = self.calc_dist_btw_nodes(cur_point, self.cur_goal,self.EUCLIDEAN_DIST)
+          if d_goal < min_d_goal:
+            min_d_goal = d_goal
+            self.proj_cur_goal = cur_point
+            self.goal_cell = i
+      #print("Cur projected goal pt ", self.goal_cell, self.proj_cur_goal)
+    
+
+    """###Calculate distance between nodes"""
+
+    def calc_dist_btw_nodes(self,node1, node2, typ):
+      if typ == self.MANHATTAN_DIST:
+        dist = abs(node2[0] -node1[0]) + abs(node2[1] - node1[1]) + abs(node2[2] - node1[2])
       else:
-        rospy.loginfo(len(pointClouds.points))
-        print("length of grid received is not 27")
+        dist = math.sqrt((abs(node2[0] -node1[0])**2) + (abs(node2[1] - node1[1])**2) + (abs(node2[2] - node1[2])**2))
+      return dist
+
 
     """###Calculate the next state"""
 
     def get_next_state(self):
       self.path_nodes_list = [self.cur_state]
-      nxt_state_off = self.select_move(self.grid)
-      self.nxt_state = self.get_coordinates(nxt_state_off, self.cur_state)
-      self.path_nodes_list.append(self.nxt_state)
+      nxt_state_offsets = self.get_jps_successors(self.grid)
+      for next_state in nxt_state_offsets:
+        #print("Offset =", next_state)
+        self.nxt_state = self.get_coordinates(next_state, self.cur_state)
+        self.path_nodes_list.append(self.nxt_state)
       self.publish_global_plan()
 
     """###Select Move"""
 
-    def select_move(self,grid):
-      nxt_state = 12 #Same position
-      offsets = [17,11,14,23,5,20,2,26,8,9,15,21,3,18,0,24,6] #Refer the offsets_dict
-      for offset in offsets:
-        if grid[offset] == self.NOT_OCCUPIED:
-          self.nxt_move = self.straight_or_diag(offset)
-          nxt_state = offset
-          break
-      return nxt_state
+    def get_jps_successors(self,grid):
+      nxt_state_off = []
+      offsets_far = [17,11,14,23,5,20,2,26,8]
+      if offsets_far.count(self.goal_cell) > 0:
+        nxt_state = self.goal_cell - 1
+        if grid[nxt_state] == self.NOT_OCCUPIED: 
+          nxt_state_off.append(nxt_state)
+          #print("Next state offset = ", nxt_state,self.get_coordinates(nxt_state, self.cur_state))
+      nxt_state_off.append(self.goal_cell)
+      return nxt_state_off
 
     """###Set mode to straight or diagonal"""
-    def straight_or_diag(self,move_off):      #TODO--Add goal logic
-      straight_moves = [13,14,9,15,21,3]
-      if straight_moves.count(move_off) > 0:
-        return self.STRAIGHT
+    def straight_or_diag(self):
+      straight_moves = [13,14,9,15,21,3]    
+      if straight_moves.count(self.goal_cell) > 0:
+        self.nxt_move = self.STRAIGHT
       else:
-        return self.DIAGONAL
+        self.nxt_move = self.DIAGONAL
+      #print("Move direction = ", self.nxt_move)
 
     """###Convert offsets back to coordinates"""
     def get_coordinates(self,offset,cur_position):
@@ -193,7 +233,8 @@ class globalPlanner:
       coordinates_off = (self.coord_offset_dict[offset])
       cur_offset = [off*self.RESOLUTION for off in coordinates_off]
       off_position = [cur_position[i]+cur_offset[i] for i in range(0,3)]
-      return off_position
+    
+      return [off_position[0]+0.25, off_position[1]+0.25, off_position[2]+0.25]
   
     """#Publish the Path"""
 
@@ -205,8 +246,7 @@ class globalPlanner:
       self.global_nodes_path = Path()	    
       pose_list = []
       i = 0
-      print(self.cur_state)
-      print(self.path_nodes_list)
+      #print(self.path_nodes_list)
       for path_node in self.path_nodes_list:
         node_pose = PoseStamped()       
         node_pose.pose.position.x = path_node[0]
@@ -250,13 +290,13 @@ class globalPlanner:
       for path_node in self.sim_path_nodes_list:
         i += 1
         if i==2:
-          self.cur_goal.p.x = path_node[0]
-          self.cur_goal.p.y = path_node[1]
-          self.cur_goal.p.z = path_node[2]
-          self.cur_goal.v.x = 2.5
-          self.cur_goal.yaw = 0.1
-          self.cur_goal.header = self.header    
-      self.goal_pub.publish(self.cur_goal)
+          self.nxt_goal.p.x = path_node[0]
+          self.nxt_goal.p.y = path_node[1]
+          self.nxt_goal.p.z = path_node[2]
+          self.nxt_goal.v.x = 2.5
+          self.nxt_goal.yaw = 0.1
+          self.nxt_goal.header = self.header    
+      self.goal_pub.publish(self.nxt_goal)
 
 """#Main module"""
 
