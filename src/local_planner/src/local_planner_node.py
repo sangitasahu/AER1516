@@ -20,6 +20,7 @@ from snapstack_msgs.msg import State, Goal
 from geometry_msgs.msg import Point, Vector3, Quaternion, PoseStamped, PointStamped
 from std_msgs.msg import Float64
 from convex_decomposer.msg import CvxDecomp, Polyhedron
+from master_node.msg import MasterNodeState
 
 class LocalPlannerNode(object):
     " Local planner node object for optimization based local trajectory planning"
@@ -41,6 +42,8 @@ class LocalPlannerNode(object):
         self.cvx_decomp_sub = rospy.Subscriber(self.cvx_decomp_topic,CvxDecomp,callback=self.cvx_decomp_sub_callback)
         self.global_goal_topic = 'goal_loc'
         self.global_goal_sub = rospy.Subscriber(self.global_goal_topic,PointStamped,callback=self.global_goal_sub_callback)
+        self.master_node_state_topic = 'master_node_state'
+        self.master_node_state_sub = rospy.Subscriber(self.master_node_state_topic,MasterNodeState,callback=self.master_node_state_sub_callback)
 
         # Publishers
         self.local_goal_topic = 'local_plan_goal'
@@ -75,6 +78,10 @@ class LocalPlannerNode(object):
         self.local_planner.global_goal = msg
         if not self.local_planner.received_global_goal:
             self.local_planner.received_global_goal = True
+
+    def master_node_state_sub_callback(self,msg):
+        # TODO: May need to consider thread safety
+        self.local_planner.master_node_state = msg
 
     def replan_callback(self,event):
         # Execute replanning step and publish path for visualization

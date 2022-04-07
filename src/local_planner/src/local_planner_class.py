@@ -7,6 +7,7 @@
 
 from __future__ import division, print_function, absolute_import
 from cmath import pi
+from enum import Enum
 
 # Import libraries
 import sys, copy
@@ -25,6 +26,7 @@ from geometry_msgs.msg import Point, PointStamped, Vector3, Quaternion, PoseStam
 from shape_msgs.msg import Plane
 from std_msgs.msg import Float64, Header
 from convex_decomposer.msg import CvxDecomp, Polyhedron
+from master_node.msg import MasterNodeState
 
 class LocalPlanner(object):
     "Local Planner Class"
@@ -36,6 +38,7 @@ class LocalPlanner(object):
         self.glob_plan = Path()
         self.cvx_decomp = CvxDecomp()
         self.global_goal = PointStamped()
+        self.master_node_state = MasterNodeState()
 
         # Flags for inputs being initialized
         self.received_state = False
@@ -78,7 +81,7 @@ class LocalPlanner(object):
         self.coll_M = 1000 # Collision constraint upper bound
         self.n_int_max = 5 # Maximum number of JPS intervals
         self.n_plane_max = 8 # Maximum number of polyhedron planes per interval
-        self.log_settings = mosek.streamtype.log # Detail level of output
+        self.log_settings = mosek.streamtype.wrn # Detail level of output
         self.set_var_names = True # Label variable names or not. Performance is allegedly faster without
 
         # Time line search parameters
@@ -93,10 +96,13 @@ class LocalPlanner(object):
         self.msk_env = mosek.Env()
         self.task = self.msk_env.Task()
 
+        # Solver settings
+        self.task.putintparam(mosek.iparam.mio_heuristic_level,0)
+
         # Misc logging settings
         self.opt_run = False
-        self.msk_env.set_Stream(mosek.streamtype.log, self.streamprinter) # Optimizer output
-        self.task.set_Stream(mosek.streamtype.log, self.streamprinter) # Optimizer output
+        self.msk_env.set_Stream(self.log_settings, self.streamprinter) # Optimizer output
+        self.task.set_Stream(self.log_settings, self.streamprinter) # Optimizer output
         self.task.putintparam(mosek.iparam.infeas_report_auto, mosek.onoffkey.on) # Infeasibility report
         self.task.putintparam(mosek.iparam.max_num_warnings,1) # Warning suppression(zeroing out constraints creates warnings)
 
@@ -173,6 +179,10 @@ class LocalPlanner(object):
 
         self.t_traj_comm_start = 0
         self.dT_traj_comm = 10 # Nonzero value, avoid zero division
+
+        # Tolerances on if we replan when we get close to the goal, solver is unstable when you're too close to the goal
+        self.goal_pos_tol = 1E-1
+        self.goal_cp_tol = 1E-4
 
         self.yaw_filt_val = 0
         self.yaw_tol = 1E-2
@@ -459,7 +469,8 @@ class LocalPlanner(object):
 
     def replan(self):
         # Check inputs initialized
-        if not (self.received_state and self.received_glob_plan and self.received_cvx_decomp and self.received_global_goal):
+        if not (self.received_state and self.received_glob_plan and 
+                self.received_cvx_decomp and self.received_global_goal):
             return
 
         # Get start time
@@ -475,6 +486,16 @@ class LocalPlanner(object):
         state_start = copy.deepcopy(self.state)
         global_plan = copy.deepcopy(self.glob_plan)
         cvx_decomp = copy.deepcopy(self.cvx_decomp)
+
+        # See if we've reached the goal within tolerance. If so don't need to keep planning, solver can be unstable
+        d_goal = np.sqrt((state_start.pos.x - self.global_goal.point.x)**2 +
+                          (state_start.pos.y - self.global_goal.point.y)**2 +
+                          (state_start.pos.z - self.global_goal.point.z)**2)
+        d_goal_cp = np.sqrt((self.cp_p_comm[3*self.n_cp*(self.n_seg-1)+(self.n_cp-1)] - self.global_goal.point.x)**2 +
+                          (self.cp_p_comm[3*self.n_cp*(self.n_seg-1)+(2*self.n_cp-1)] - self.global_goal.point.y)**2 +
+                          (self.cp_p_comm[3*self.n_cp*(self.n_seg-1)+(3*self.n_cp-1)] - self.global_goal.point.z)**2)
+        if d_goal < self.goal_pos_tol and d_goal_cp < self.goal_cp_tol:
+            return
 
         # Problem size
         n_int = len(cvx_decomp.polyhedra)
@@ -543,8 +564,10 @@ class LocalPlanner(object):
         # Calculate time allocation. Minimum time for constant input motions between current and goal states, multiply by adaptive scale factor
         dx = x_f-x_0
         dv = v_f-v_0
+        da = a_f-a_0
         t_min = np.max(np.vstack((np.abs(dx)/self.v_max,
-                                np.abs(dv)/self.a_max)))
+                                np.abs(dv)/self.a_max,
+                                np.abs(da)/self.j_max)))
         
         t_alloc = t_min*self.f
 
@@ -692,7 +715,7 @@ class LocalPlanner(object):
             self.bkx[ind_bin_actv[i]] = [mosek.boundkey.ra]
             self.blx[ind_bin_actv[i]] = 0
             self.bux[ind_bin_actv[i]] = 1
-
+        
         # Velocity/Acceleration/Jerk Consistency - Just need to update time values
         # Velocity
         a_val_v_cons = dT*np.ones(self.num_vel)
@@ -722,8 +745,6 @@ class LocalPlanner(object):
         self.task.putqobj(q_cost_subi,q_cost_subi,q_cost_val)
 
         # Call solver
-        # TODO: Try some of the stuff here to speed it up:
-        # https://docs.mosek.com/latest/pythonapi/mip-optimizer.html#speeding-up-the-solution-process
         self.task.optimize()
         self.task.solutionsummary(mosek.streamtype.log)
         self.task.optimizersummary(mosek.streamtype.log)
@@ -735,11 +756,17 @@ class LocalPlanner(object):
         soln_bad = (solsta == mosek.solsta.unknown or solsta == mosek.solsta.prim_infeas_cer
                     or solsta == mosek.solsta.dual_infeas_cer or solsta == mosek.solsta.prim_illposed_cer
                     or solsta == mosek.solsta.dual_illposed_cer)
-        
+
+        t_soln = rospy.get_rostime()
         if soln_bad:
             # Bad exit code. Keep working off of existing solution
-            rospy.loginfo("Bad solver exit status:%s".format(str(solsta)))
+            rospy.loginfo("Bad solver exit status: {}, {}".format(str(prosta), str(solsta)))
+            rospy.loginfo("At t = {:.1f} s".format(t_soln.to_sec()))
             return
+        else:
+            rospy.loginfo("Successful solution: {}, {}".format(str(prosta), str(solsta)))
+            rospy.loginfo("At t = {:.1f} s. Solve time: {:.1f} ms".format(t_soln.to_sec(),
+                                                                            1000*(t_soln.to_sec()-t_replan_start_s)))
         
         if not self.opt_run:
             self.opt_run = True
@@ -797,13 +824,13 @@ class LocalPlanner(object):
             self.dT_traj_comm = self.dT_traj_opt
 
         goal_p_interp = bezier_interpolate(self.cp_p_comm.reshape(self.n_cp,3,self.n_seg,order='F').swapaxes(0,1),
-                                            self.dT_traj_comm*np.ones(self.n_seg),t_curr_s-self.t_traj_comm_start,n=3)
+                                            self.dT_traj_comm*np.ones(self.n_seg),t_curr_s-self.t_traj_comm_start,n=3).flatten()
         goal_v_interp = bezier_interpolate(self.cp_v_comm.reshape(self.n_cp-1,3,self.n_seg,order='F').swapaxes(0,1),
-                                            self.dT_traj_comm*np.ones(self.n_seg),t_curr_s-self.t_traj_comm_start,n=2)
+                                            self.dT_traj_comm*np.ones(self.n_seg),t_curr_s-self.t_traj_comm_start,n=2).flatten()
         goal_a_interp = bezier_interpolate(self.cp_a_comm.reshape(self.n_cp-2,3,self.n_seg,order='F').swapaxes(0,1),
-                                            self.dT_traj_comm*np.ones(self.n_seg),t_curr_s-self.t_traj_comm_start,n=1)
+                                            self.dT_traj_comm*np.ones(self.n_seg),t_curr_s-self.t_traj_comm_start,n=1).flatten()
         goal_j_interp = bezier_interpolate(self.cp_j_comm.reshape(self.n_cp-3,3,self.n_seg,order='F').swapaxes(0,1),
-                                            self.dT_traj_comm*np.ones(self.n_seg),t_curr_s-self.t_traj_comm_start,n=0)
+                                            self.dT_traj_comm*np.ones(self.n_seg),t_curr_s-self.t_traj_comm_start,n=0).flatten()
 
         # Populate goal message
         goal_new = Goal()
@@ -833,7 +860,7 @@ class LocalPlanner(object):
 
         if self.goal_log:
             if self.goal_log_count%self.goal_log_int == 0:
-                rospy.loginfo("Published goal location %s",goal_new.p)
+                rospy.loginfo("Published goal location [{:.3f},{:.3f},{:.3f}]".format(goal_new.p.x,goal_new.p.y,goal_new.p.z))
             self.goal_log_count += 1
         
         self.goal = goal_new

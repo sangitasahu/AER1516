@@ -28,11 +28,11 @@ class MasterNode(object):
         # Parameters
         # Flight Parameters
         self.start_delay = 3 # s
-        self.start_x = 2
-        self.start_y = 6
+        self.start_x = 0
+        self.start_y = 0
         self.start_z = 0
         self.start_yaw = 0
-        self.flight_z = 1 # m. Fly at constant height off the ground for simplicity
+        self.flight_z = 3 # m. Fly at constant height off the ground for simplicity
         self.takeoff_speed = 1 # m/s
 
         self.frame_id = "world"
@@ -51,7 +51,7 @@ class MasterNode(object):
         # 0 - Local planner
         # 1 - Global planner passthrough (for debugging)
         # 2 - Hold location (for debugging)
-        self.path_mode = 2
+        self.path_mode = 0
         self.global_plan_flight_speed = 3 # m/s
 
         # Rates
@@ -236,7 +236,7 @@ class MasterNode(object):
         elif self.node_state == NodeState.FLIGHT_HOLD:
             # Hold position
             hold = 5
-            
+
         # Update global goal location for global planner
         if self.goal_mode == 0:
             # Constant goal location
