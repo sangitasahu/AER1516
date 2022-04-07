@@ -55,18 +55,26 @@ class LocalPlannerNode(object):
     def state_sub_callback(self,msg):
         # TODO: May need to consider thread safety
         self.local_planner.state = msg
+        if not self.local_planner.received_state:
+            self.local_planner.received_state = True
     
     def glob_plan_sub_callback(self,msg):
         # TODO: May need to consider thread safety
         self.local_planner.glob_plan = msg
+        if not self.local_planner.received_glob_plan:
+            self.local_planner.received_glob_plan = True
 
     def cvx_decomp_sub_callback(self,msg):
         # TODO: May need to consider thread safety
         self.local_planner.cvx_decomp = msg
+        if not self.local_planner.received_cvx_decomp:
+            self.local_planner.received_cvx_decomp = True
 
     def global_goal_sub_callback(self,msg):
         # TODO: May need to consider thread safety
         self.local_planner.global_goal = msg
+        if not self.local_planner.received_global_goal:
+            self.local_planner.received_global_goal = True
 
     def replan_callback(self,event):
         # Execute replanning step and publish path for visualization

@@ -37,6 +37,12 @@ class LocalPlanner(object):
         self.cvx_decomp = CvxDecomp()
         self.global_goal = PointStamped()
 
+        # Flags for inputs being initialized
+        self.received_state = False
+        self.received_glob_plan = False
+        self.received_cvx_decomp = False
+        self.received_global_goal = False
+
         # Outputs
         self.goal = Goal()
         self.goal.p.x=0.0
@@ -76,7 +82,7 @@ class LocalPlanner(object):
         self.set_var_names = True # Label variable names or not. Performance is allegedly faster without
 
         # Time line search parameters
-        self.f = 3 # Factor on constant motion solution. Start conservatively
+        self.f = 2 # Factor on constant motion solution. Start conservatively
         self.alpha = 1.25 # Replanning time factor to plan from on old solution
         self.gamma_up = 1 # Limit on how much time factor can increase/decrease on each timestep
         self.gamma_down = 0.25
@@ -93,6 +99,10 @@ class LocalPlanner(object):
         self.task.set_Stream(mosek.streamtype.log, self.streamprinter) # Optimizer output
         self.task.putintparam(mosek.iparam.infeas_report_auto, mosek.onoffkey.on) # Infeasibility report
         self.task.putintparam(mosek.iparam.max_num_warnings,1) # Warning suppression(zeroing out constraints creates warnings)
+
+        self.goal_log = True
+        self.goal_log_int = 100
+        self.goal_log_count = 0
 
         # Decision variables:
         # 4x position control points per segment,
@@ -170,7 +180,7 @@ class LocalPlanner(object):
         self.yaw_filt_coef = (2*pi*self.yaw_filt_cutoff/self.goal_freq)/(1+2*pi*self.yaw_filt_cutoff/self.goal_freq)
 
         # Option to plan from future or last reported state
-        self.plan_start_future = False
+        self.plan_start_future = True
         self.plan_future_t_fac = 1.25 # Factor to apply to execution time from last replanning iteration. Make sure we can find a new plan in time
         self.replan_time_prev = 0 # First replan should be immediate
 
@@ -448,8 +458,13 @@ class LocalPlanner(object):
         self.msk_env.__del__()
 
     def replan(self):
-        # Get start time for cutting off if we run for too long
+        # Check inputs initialized
+        if not (self.received_state and self.received_glob_plan and self.received_cvx_decomp and self.received_global_goal):
+            return
+
+        # Get start time
         t_replan_start = rospy.get_rostime()
+        t_replan_start_s = t_replan_start.to_sec()
 
         # Option for fake planning where we execute static problem from first state
         if self.fake_plan and self.first_plan:
@@ -470,30 +485,69 @@ class LocalPlanner(object):
         n_planes = np.zeros(n_int)
         for i in range(n_int):
             n_planes[i] = len(cvx_decomp.polyhedra[i].planes)
-        
 
-        # Calculate time allocation
-        # Calculate minimum time for constant input motions between current and goal states, multiply by adaptive scale factor
-        x_0 = np.array([state_start.pos.x,state_start.pos.y,state_start.pos.z])
-        v_0 = np.array([state_start.vel.x,state_start.vel.y,state_start.vel.z])
+        # Calculate initial condition
         if self.fake_plan:
             # For fake static problem just run from first state
             x_0 = np.array([global_plan.poses[0].pose.position.x,
                             global_plan.poses[0].pose.position.y,
                             global_plan.poses[0].pose.position.z])
             v_0 = np.zeros(3)
+            a_0 = np.zeros(3)
+        else:
+            # Calculate time to plan from
+            if self.plan_start_future:
+                t_plan_start = t_replan_start_s + self.plan_future_t_fac*self.replan_time_prev
+            else:
+                t_plan_start = t_replan_start_s
+
+            # Position and velocity depends on if we plan from current or future state
+            if self.plan_start_future and self.opt_run:
+                # Interpolate either committed or most recent optimal trajectory result, depending on which is appropriate
+                if t_plan_start > self.t_traj_opt_start:
+                    # Interpolate on most recent optimal trajectory result
+                    x_0 = bezier_interpolate(self.cp_p_opt.reshape(self.n_cp,3,self.n_seg,order='F').swapaxes(0,1),
+                                            self.dT_traj_opt*np.ones(self.n_seg),t_plan_start-self.t_traj_opt_start,n=3).flatten()
+                    v_0 = bezier_interpolate(self.cp_v_opt.reshape(self.n_cp-1,3,self.n_seg,order='F').swapaxes(0,1),
+                                            self.dT_traj_opt*np.ones(self.n_seg),t_plan_start-self.t_traj_opt_start,n=2).flatten()
+                else:
+                    # Won't have yet reached most recent optimal trajectory result, stick to committed trajectory
+                    x_0 = bezier_interpolate(self.cp_p_comm.reshape(self.n_cp,3,self.n_seg,order='F').swapaxes(0,1),
+                                            self.dT_traj_comm*np.ones(self.n_seg),t_plan_start-self.t_traj_comm_start,n=3).flatten()
+                    v_0 = bezier_interpolate(self.cp_v_comm.reshape(self.n_cp-1,3,self.n_seg,order='F').swapaxes(0,1),
+                                            self.dT_traj_comm*np.ones(self.n_seg),t_plan_start-self.t_traj_comm_start,n=2).flatten()
+            else:
+                # Plan from current state, rather than a future point
+                x_0 = np.array([state_start.pos.x,state_start.pos.y,state_start.pos.z])
+                v_0 = np.array([state_start.vel.x,state_start.vel.y,state_start.vel.z])
+            
+            # Interpolate acceleration at planning start time, no need to distinguish
+            if not self.opt_run:
+                # Initialize with zeros
+                a_0 = np.zeros(3)
+            elif t_plan_start > self.t_traj_opt_start:
+                # Interpolate on most recent optimal trajectory result
+                a_0 = bezier_interpolate(self.cp_a_opt.reshape(self.n_cp-2,3,self.n_seg,order='F').swapaxes(0,1),
+                                        self.dT_traj_opt*np.ones(self.n_seg),t_plan_start-self.t_traj_opt_start,n=1).flatten()
+            else:
+                # Won't have yet reached most recent optimal trajectory result, stick to committed trajectory
+                a_0 = bezier_interpolate(self.cp_a_comm.reshape(self.n_cp-2,3,self.n_seg,order='F').swapaxes(0,1),
+                                        self.dT_traj_comm*np.ones(self.n_seg),t_plan_start-self.t_traj_comm_start,n=1).flatten()
+            
         x_f = np.array([global_plan.poses[n_glob_last-1].pose.position.x,
                         global_plan.poses[n_glob_last-1].pose.position.y,
                         global_plan.poses[n_glob_last-1].pose.position.z])
         v_f = np.zeros(3)
         a_f = np.zeros(3)
         
+        # Calculate time allocation. Minimum time for constant input motions between current and goal states, multiply by adaptive scale factor
         dx = x_f-x_0
         dv = v_f-v_0
         t_min = np.max(np.vstack((np.abs(dx)/self.v_max,
                                 np.abs(dv)/self.a_max)))
         
         t_alloc = t_min*self.f
+
         if self.fake_plan:
             # Time allocation fixed for fake static problem
             t_alloc = self.fake_t_alloc
@@ -505,11 +559,11 @@ class LocalPlanner(object):
         # Velocity/position at initial condition, p/v/a at final condition (acceleration not defined in fake sim)
         # TODO: Need to get initial acceleration in here somehow. Assume zero as a placeholder for now
         bkx_ic_bc = [mosek.boundkey.fx]*3*6
-        blx_ic_bc = np.hstack((x_0,v_0,np.array([0,0,0]),x_f,v_f,a_f))
+        blx_ic_bc = np.hstack((x_0,v_0,a_0,x_f,v_f,a_f))
         bux_ic_bc = blx_ic_bc
         b_ind_ic_bc = []
 
-        ic_all = np.vstack((x_0,v_0,np.array([0,0,0])))
+        ic_all = np.vstack((x_0,v_0,a_0))
         bc_all = np.vstack((x_f,v_f,a_f))
         # Initial conditions
         ind_table = [0,self.ind_vel,self.ind_accel]
@@ -777,7 +831,10 @@ class LocalPlanner(object):
         
         goal_new.header = Header(stamp=t_curr,frame_id = self.frame_id)
 
-        rospy.loginfo("Published goal location %s",goal_new.p)
+        if self.goal_log:
+            if self.goal_log_count%self.goal_log_int == 0:
+                rospy.loginfo("Published goal location %s",goal_new.p)
+            self.goal_log_count += 1
         
         self.goal = goal_new
 
