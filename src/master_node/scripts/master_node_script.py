@@ -28,11 +28,11 @@ class MasterNode(object):
         # Parameters
         # Flight Parameters
         self.start_delay = 3 # s
-        self.start_x = 0
-        self.start_y = 0
+        self.start_x = 2
+        self.start_y = 6
         self.start_z = 0
         self.start_yaw = 0
-        self.flight_z = 3 # m. Fly at constant height off the ground for simplicity
+        self.flight_z = 1 # m. Fly at constant height off the ground for simplicity
         self.takeoff_speed = 1 # m/s
 
         self.frame_id = "world"
@@ -41,16 +41,17 @@ class MasterNode(object):
         # Goal Mode
         # 0 - Fixed goal location
         # 1 - Clicked point
-        self.goal_mode = 1
-        self.goal_fixed_x = 5
-        self.goal_fixed_y = 5
+        self.goal_mode = 0
+        self.goal_fixed_x = 20
+        self.goal_fixed_y = 20
         self.goal_fixed_z = self.flight_z
         self.goal_yaw = 0
 
         # Path mode
         # 0 - Local planner
         # 1 - Global planner passthrough (for debugging)
-        self.path_mode = 0
+        # 2 - Hold location (for debugging)
+        self.path_mode = 2
         self.global_plan_flight_speed = 3 # m/s
 
         # Rates
@@ -140,10 +141,12 @@ class MasterNode(object):
             if goal_z_temp > self.flight_z:
                 # Reached target z height, transition to flight state
                 self.goal_filt_z = self.flight_z
-                if self.path_mode == 1:
+                if self.path_mode == 0:
+                    self.node_state = NodeState.FLIGHT_LOCAL
+                elif self.path_mode == 1:
                     self.node_state = NodeState.FLIGHT_GLOBAL
                 else:
-                    self.node_state = NodeState.FLIGHT_LOCAL
+                    self.node_state = NodeState.FLIGHT_HOLD
             else:
                 self.goal_filt_z = goal_z_temp
             
@@ -230,7 +233,10 @@ class MasterNode(object):
                 goal_new.p.z = posn_reached[2]
                 goal_new.yaw = self.goal_filt_yaw
                 self.goal_pub.publish(goal_new)
-
+        elif self.node_state == NodeState.FLIGHT_HOLD:
+            # Hold position
+            hold = 5
+            
         # Update global goal location for global planner
         if self.goal_mode == 0:
             # Constant goal location
@@ -262,6 +268,7 @@ class NodeState(IntEnum):
     TAKEOFF = 1
     FLIGHT_LOCAL = 2
     FLIGHT_GLOBAL = 3
+    FLIGHT_HOLD = 4
     UNKNOWN = 10
 
 if __name__ == '__main__':
