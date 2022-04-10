@@ -28,11 +28,11 @@ class MasterNode(object):
         # Parameters
         # Flight Parameters
         self.start_delay = 3 # s
-        self.start_x = 2
-        self.start_y = 6
+        self.start_x = 0
+        self.start_y = 0
         self.start_z = 0
         self.start_yaw = 0
-        self.flight_z = 1 # m. Fly at constant height off the ground for simplicity
+        self.flight_z = 3 # m. Fly at constant height off the ground for simplicity
         self.takeoff_speed = 1 # m/s
 
         self.frame_id = "world"
@@ -51,7 +51,7 @@ class MasterNode(object):
         # 0 - Local planner
         # 1 - Global planner passthrough (for debugging)
         # 2 - Hold location (for debugging)
-        self.path_mode = 2
+        self.path_mode = 0
         self.global_plan_flight_speed = 3 # m/s
 
         # Rates
@@ -133,6 +133,7 @@ class MasterNode(object):
             if self.start_timer>self.start_delay:
                 # Transition to takeoff state
                 self.node_state = NodeState.TAKEOFF
+                rospy.loginfo("Transitioning to takeoff state")
 
         elif self.node_state == NodeState.TAKEOFF:
             # Fake flying up to target z height
@@ -143,17 +144,21 @@ class MasterNode(object):
                 self.goal_filt_z = self.flight_z
                 if self.path_mode == 0:
                     self.node_state = NodeState.FLIGHT_LOCAL
+                    rospy.loginfo("Transitioning to local planner flight state")
                 elif self.path_mode == 1:
                     self.node_state = NodeState.FLIGHT_GLOBAL
+                    rospy.loginfo("Transitioning to global planner flight state")
                 else:
                     self.node_state = NodeState.FLIGHT_HOLD
+                    rospy.loginfo("Transitioning to hold state")
             else:
                 self.goal_filt_z = goal_z_temp
             
             # Publish updated goal location
             new_goal = Goal(header=Header(stamp=rospy.get_rostime(),frame_id = self.frame_id))
             new_goal.p = Vector3(x=self.start_x,y=self.start_y,z=self.goal_filt_z)
-            new_goal.v = Vector3(z=self.takeoff_speed)
+            if self.node_state == NodeState.TAKEOFF:
+                new_goal.v = Vector3(z=self.takeoff_speed)
             self.goal_pub.publish(new_goal)
 
         elif self.node_state == NodeState.FLIGHT_LOCAL:
@@ -161,6 +166,7 @@ class MasterNode(object):
             # If unintialized, do not modify
             if self.received_local_plan:
                 goal_new = copy.deepcopy(self.local_plan_goal)
+                # print('I read local goal: [{:.2f},{:.2f},{:.2f}]'.format(goal_new.p.x,goal_new.p.y,goal_new.p.z))
                 self.goal_filt_x = self.goal_filt_coef*goal_new.p.x + (1-self.goal_filt_coef)*self.goal_filt_x
                 self.goal_filt_y = self.goal_filt_coef*goal_new.p.y + (1-self.goal_filt_coef)*self.goal_filt_y
                 self.goal_filt_z = self.goal_filt_coef*goal_new.p.z + (1-self.goal_filt_coef)*self.goal_filt_z
@@ -236,7 +242,7 @@ class MasterNode(object):
         elif self.node_state == NodeState.FLIGHT_HOLD:
             # Hold position
             hold = 5
-            
+
         # Update global goal location for global planner
         if self.goal_mode == 0:
             # Constant goal location
