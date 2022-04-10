@@ -394,7 +394,7 @@ class globalPlanner:
               nxt_paths = list(paths.keys())
               nxt_costs = list(costs.keys())
               old_move = 12
-              #print("Paths n costs =",paths)              
+              #print("Paths n costs =",paths)
               self.num_iteration = 0
               if len(nxt_paths) > 0:
                 #print("next paths =", nxt_paths,paths[nxt_paths[0]])
