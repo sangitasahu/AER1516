@@ -166,23 +166,5 @@ int main(int argc, char **argv)
     ros::Subscriber sub_state = state.subscribe("/SQ01s/state", 10, state_callback);
     pubProb = occupancyProbability.advertise<sensor_msgs::PointCloud>("probability_publisher",1000);
     pubGrid = gridNode.advertise<sensor_msgs::PointCloud>("grid_publisher",1000);
-
-    /*ros::Subscriber sub = n.subscribe("octomap_binary", 1000, octomap_binary_callback);
-    ros::NodeHandle state;
-    ros::Subscriber sub_state = state.subscribe("/SQ01s/state", 10, state_callback);
-    ros::NodeHandle occupancyProbability; 
-    ros::NodeHandle gridNode;
-    ros::NodeHandle points;
-    pubProb = occupancyProbability.advertise<sensor_msgs::PointCloud>("probability_publisher",1000);
-    pubGrid = gridNode.advertise<sensor_msgs::PointCloud>("grid_publisher",1000);
-    
-    ros::Rate rate(1); 
-
-    while (ros::ok()) {        
-        pubProb = occupancyProbability.advertise<sensor_msgs::PointCloud>("probability_publisher",1000);
-        pubGrid = gridNode.advertise<sensor_msgs::PointCloud>("grid_publisher",1000);
-        rate.sleep();
-        //ros::spin();  
-    }  */
     ros::spin();
 }
