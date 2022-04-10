@@ -60,7 +60,7 @@ class cvx_decomp(object):
         # Set the controller frequency
         self.loop_frequency = 1.0
         # Run this ROS node at the loop frequency
-        self.pub_vel_cmd_timer = rospy.Timer(rospy.Duration(1.0 / self.loop_frequency), self.decompose_points)
+        #self.pub_vel_cmd_timer = rospy.Timer(rospy.Duration(1.0 / self.loop_frequency), self.decompose_points)
         
         # Keep time for differentiation and integration within the controller
         self.old_time = rospy.get_time()

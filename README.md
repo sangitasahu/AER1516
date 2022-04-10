@@ -116,3 +116,115 @@ NOTE:
 3) Check status by subscribing to /SQ01/state
 4) ~/camera/ gives camera info, all data already transformed
 
+# Git Project Structure
+
+For AER1516 project, we will have the following Git branches:
+
+1) main
+2) testing (under main)
+3) develop (under main)
+
+The "develop" branch will be used during development and it contains the following 4 branches for four of us:
+1) mapper
+2) global_planner
+3) convex_decomposition
+4) local_planner
+
+From now onwards always commit to the "develop" branch. Once implementation is over, we can merge our code to the "testing" branch for quadrotor simulation. Only at the end, the final code will be merged to the "main" branch.
+
+If you want to develop small modules inside your package, you can create multiple branches under your develop/xxxxx/ branch.
+
+Note: Local refers to your PC and remote refers to GitHub
+
+## Setting up your Git branch
+
+### Clone the Repo
+```
+$ git clone https://github.com/sangitasahu/AER1516.git
+```
+### Check the current branches 
+```
+$ cd AER1516/
+$ git branch
+$ git status
+```
+### Create a local branch (e.g. global_planner) if it doesn't exist
+```
+$ git checkout -b global_planner
+$ git branch
+```
+Note: I have created branches named "mapper", "local_planner" and "convex_decomposition" in Github. You can use them.
+
+### Add and commit all the current changes to the current local branch
+```
+$ git add .
+$ git commit -m "my first commit!"
+```
+Give appropriate mesages for future tracking. We can also combine both the add and commit commands.
+```
+$ git commit -a -m "updated git commands"
+```
+### To connect the local branch to the remote branch
+```
+$ git branch --set-upstream-to=origin/global_planner global_planner
+```
+Note : Make sure there exists a branch with the local branch name in GitHub, else manually create it.
+
+### Push the changes from local branch to remote branch
+Note: Pulling is optional, pull from remote to local branch if required, else directly give push command for pushing changes from local to remote.
+```
+$ git pull
+$ git push
+```
+Note: After every push, create a Pull request to the "develop" branch in GitHub by clicking "Create Pull Request" in your branch. Add a reviewer if possible, and then u can merge it to the "develop" branch.
+
+Caution: Donot create or merge others' Pull requests. 
+
+## Other Useful Commands
+To Make or initialise a folder as Git Folder
+```
+$ git init
+```
+Pointing the local git folder to remote repository.
+```
+$ git remote add origin <http_address>
+```
+Update local repository with fresh data without merging them with current branch
+```
+$ git fetch 
+```
+List Branches
+```
+$ git branch  
+```
+For switching to any branch
+```
+$ git checkout develop
+```
+For deleting a branch
+```
+$ git branch -d <branch_name>
+```
+To check the changes
+```
+$ git diff 
+```
+
+## MOSEK Installation Steps
+The MOSEK optimizer needs to be installed both systemwide as well as installing a Python package to interface with it. Installation steps are described in the documentation here: https://docs.mosek.com/9.3/install/installation.html for the general setup and here: https://docs.mosek.com/latest/pythonapi/install-interface.html for the Python interface
+1. Request an academic license here with your school email: https://www.mosek.com/products/academic-licenses/. It's automated and you should get an email relatively quickly
+2. Download and run the overall installer for your system from here: https://docs.mosek.com/9.3/install/installation.html#general-setup
+3. Add a path variable for the runnable location. I did it by adding the following to my .bashrc. I have it installed in my home directory so if you put it elsewhere you'll have to update that obviously
+```
+# MOSEK path
+export PATH=$PATH:~/mosek/mosek/9.3/tools/platform/linux64x86/bin
+```
+4. Dump the license file they send you in the root install folder below. Check it's set up properly by running msktestlic in a terminal
+```
+$HOME/mosek/mosek.lic
+```
+5. Install the Python interface via Pip in the Python environment your ROS setup is using
+```
+pip install Mosek
+```
+6. That's it! If you want you can test it by downloading and running one of the tutorial problems. There's a simple QP example here: https://docs.mosek.com/latest/pythonapi/tutorial-qo-shared.html . The general documentation for the Python interface is here if you're curious: https://docs.mosek.com/latest/pythonapi/intro_info.html

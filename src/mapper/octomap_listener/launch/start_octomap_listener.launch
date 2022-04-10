@@ -1,0 +1,6 @@
+<launch>
+	
+	<!-- Mapper Module -->
+	<node name="octomap_listener" pkg="octomap_listener" type="octomapListner.cpp" output="screen"/>
+
+</launch>
