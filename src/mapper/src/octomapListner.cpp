@@ -42,9 +42,7 @@ std::vector<geometry_msgs::Point32> grid_point_gen(geometry_msgs::Point32 offset
                 grid3d.z = i;
                 grids3d.push_back(grid3d);
             }
-        
         }
-
     }    
     return grids3d;
 
@@ -152,7 +150,6 @@ void octomap_binary_callback(const octomap_msgs::OctomapConstPtr& octomap_msg)
 
     pubProb.publish(occupancy_info); 
     pubGrid.publish(grid_info);
-
     
 }
 
