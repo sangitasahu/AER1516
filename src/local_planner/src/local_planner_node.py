@@ -17,7 +17,7 @@ from local_planner_class import LocalPlanner
 # Import message types
 from nav_msgs.msg import Path
 from snapstack_msgs.msg import State, Goal
-from geometry_msgs.msg import Point, Vector3, Quaternion, PoseStamped
+from geometry_msgs.msg import Point, Vector3, Quaternion, PoseStamped, PointStamped
 from std_msgs.msg import Float64
 from convex_decomposer.msg import CvxDecomp, Polyhedron
 
@@ -40,11 +40,11 @@ class LocalPlannerNode(object):
         self.cvx_decomp_topic = 'cvx_decomp'
         self.cvx_decomp_sub = rospy.Subscriber(self.cvx_decomp_topic,CvxDecomp,callback=self.cvx_decomp_sub_callback)
         self.global_goal_topic = 'goal_loc'
-        self.global_goal_sub = rospy.Subscriber(self.global_goal_topic,Point,callback=self.global_goal_sub_callback)
+        self.global_goal_sub = rospy.Subscriber(self.global_goal_topic,PointStamped,callback=self.global_goal_sub_callback)
 
         # Publishers
-        self.goal_topic = '/SQ01s/goal'
-        self.goal_pub = rospy.Publisher(self.goal_topic,Goal,queue_size=10)
+        self.local_goal_topic = 'local_plan_goal'
+        self.local_goal_pub = rospy.Publisher(self.local_goal_topic,Goal,queue_size=10)
         self.path_topic = 'local_plan'
         self.path_pub = rospy.Publisher(self.path_topic,Path,queue_size=10)
 
@@ -55,18 +55,26 @@ class LocalPlannerNode(object):
     def state_sub_callback(self,msg):
         # TODO: May need to consider thread safety
         self.local_planner.state = msg
+        if not self.local_planner.received_state:
+            self.local_planner.received_state = True
     
     def glob_plan_sub_callback(self,msg):
         # TODO: May need to consider thread safety
         self.local_planner.glob_plan = msg
+        if not self.local_planner.received_glob_plan:
+            self.local_planner.received_glob_plan = True
 
     def cvx_decomp_sub_callback(self,msg):
         # TODO: May need to consider thread safety
         self.local_planner.cvx_decomp = msg
+        if not self.local_planner.received_cvx_decomp:
+            self.local_planner.received_cvx_decomp = True
 
     def global_goal_sub_callback(self,msg):
         # TODO: May need to consider thread safety
         self.local_planner.global_goal = msg
+        if not self.local_planner.received_global_goal:
+            self.local_planner.received_global_goal = True
 
     def replan_callback(self,event):
         # Execute replanning step and publish path for visualization
@@ -76,7 +84,7 @@ class LocalPlannerNode(object):
     def update_goal_callback(self,event):
         # Interpolate goal at current point in time and publish
         self.local_planner.update_goal()
-        self.goal_pub.publish(self.local_planner.goal)
+        self.local_goal_pub.publish(self.local_planner.goal)
 
 if __name__ == '__main__':
     try:

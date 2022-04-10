@@ -1,0 +1,10 @@
+<launch>
+
+	<!-- Master Node -->
+	<node name="master_node" pkg="master_node" type="master_node_script.py"/>
+
+	<!-- Local Planner -->
+	<node name="test_talker" pkg="local_planner" type="test_talker.py"/>
+	<node name="local_planner" pkg="local_planner" type="local_planner_node.py"/>
+
+</launch>
