@@ -421,7 +421,7 @@ class globalPlanner:
     """###Check path is valid"""
     def is_path_valid(self, path):
       for node in path:
-        print("Node = ", node, "Valid =",self.is_reachable(node) )        
+        #print("Node = ", node, "Valid =",self.is_reachable(node) )        
         if not self.is_reachable(node):
           return False
       return True
@@ -526,7 +526,7 @@ class globalPlanner:
       for point in self.map_points.points:
         if self.is_same_node([point.x, point.y, point.z], node):
           occ_sts = self.occupancy_sts.values[node_idx] 
-          print("Node idx",node_idx, node, "Occ = ", occ_sts)
+          #print("Node idx",node_idx, node, "Occ = ", occ_sts)
           break
         node_idx += 1
       return occ_sts
