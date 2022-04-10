@@ -42,7 +42,9 @@ std::vector<geometry_msgs::Point32> grid_point_gen(geometry_msgs::Point32 offset
                 grid3d.z = i;
                 grids3d.push_back(grid3d);
             }
+        
         }
+
     }    
     return grids3d;
 
@@ -150,6 +152,7 @@ void octomap_binary_callback(const octomap_msgs::OctomapConstPtr& octomap_msg)
 
     pubProb.publish(occupancy_info); 
     pubGrid.publish(grid_info);
+
     
 }
 
@@ -158,13 +161,14 @@ int main(int argc, char **argv)
 {
     ros::init(argc, argv, "octomapListener");
     ros::NodeHandle n;
+    ros::Subscriber sub = n.subscribe("octomap_binary", 1000, octomap_binary_callback);
     ros::NodeHandle state;
+    ros::Subscriber sub_state = state.subscribe("/SQ01s/state", 10, state_callback);
     ros::NodeHandle occupancyProbability; 
     ros::NodeHandle gridNode;
     ros::NodeHandle points;
-    ros::Subscriber sub = n.subscribe("octomap_binary", 1000, octomap_binary_callback);
-    ros::Subscriber sub_state = state.subscribe("/SQ01s/state", 10, state_callback);
     pubProb = occupancyProbability.advertise<sensor_msgs::PointCloud>("probability_publisher",1000);
     pubGrid = gridNode.advertise<sensor_msgs::PointCloud>("grid_publisher",1000);
-    ros::spin();
+
+    ros::spin();    
 }

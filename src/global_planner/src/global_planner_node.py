@@ -3,7 +3,7 @@
 import math
 import rospy
 from snapstack_msgs.msg import Goal, State
-from geometry_msgs.msg import PoseStamped, Vector3
+from geometry_msgs.msg import PoseStamped, PointStamped
 from nav_msgs.msg import Path
 from sensor_msgs.msg import PointCloud, ChannelFloat32
 from std_msgs.msg import Header
@@ -26,13 +26,9 @@ class globalPlanner:
 
         """#Constants"""
 
-        #Directions 
-        self.DIAGONAL1 = 1
-        self.DIAGONAL2 = 2
-        self.STRAIGHT = 0
         #Map related
-        self.BB_WIDTH = 2
-        self.STOP_DISTANCE = 1.414
+        self.BB_WIDTH = 2   #Can use to find map size
+        self.STOP_DISTANCE = 1
         self.RESOLUTION = 0.125
         self.X_LIMIT = [0 , 100]
         self.Y_LIMIT = [0,  100]
@@ -52,7 +48,6 @@ class globalPlanner:
         self.OCCUPIED = 1
         self.NOT_OCCUPIED = 0
         #JPS related
-        self.GRID_WIN_WIDTH = 3
         self.MAX_NUM_ITERATIONS = 100
         self.STRAIGHT_MOVES = [13,9,15,21,3] 
         self.DIAGONAL1_MOVES = [10,16,18,0,22,4,24,6]
@@ -71,23 +66,19 @@ class globalPlanner:
         self.occupancy_sts.name = 'grid occupancy'
         
         #JPS related
-        self.nxt_move = self.STRAIGHT #Can be straight or diagonal
         self.nxt_move_num = 0 #Move number
         self.num_of_cells = 0 
-        self.cur_goal = [29,30,3]        
+        self.cur_goal = [0,0,0]        
         self.proj_cur_goal = [0,0,0]
         self.cur_state = [0,0,0]
         self.path_nodes_list = []
-        self.grid = [0,0,0,0,0,0,0,0,0,   0,0,0,0,0,1,0,0,0,   0,0,0,0,0,0,0,0,0]
         self.cur_state_in_grid = [0,0,0]
-        self.nxt_suitable_moves = [13]
-        self.allowed_lengths = [27, 125, 729]
+        self.allowed_lengths = [27, 125, 729]  #For fixed map sizes
         self.total_path_cost=0
         self.visited_nodes_list =[0,0,0]
 
         #For simulation only
-        self.cntr = 0
-        self.sim_en = True
+        self.sim_en = True   #False when use master node sends goals
         self.sim_path_nodes_list =[]
         
         #Control flags and counters
@@ -101,7 +92,6 @@ class globalPlanner:
         self.debug_en = False
       
         #Publishers related
-        self.pub_rate = rospy.Rate(10)	 #10Hz
         self.global_path_pub = rospy.Publisher('global_plan', Path, queue_size=100)
         self.goal_pub = rospy.Publisher('/SQ01s/goal', Goal, queue_size=100)
 
@@ -167,55 +157,34 @@ class globalPlanner:
           7 :[13,14,15,34,3,36],
           12 : [0,0] }
 
-        self.suitable_moves_dict = {
-          13 : [11,17],
-          21 : [18,24],
-          3 :  [0,6],
-          15 : [16,24],
-          9 :  [10,18],
-          10 : [13,9],
-          16 : [13,15],
-          18 : [9,21],
-          0 :  [9,3],
-          24 : [15,21],
-          6 :  [15,3],
-          22 : [13,21],
-          4 :  [13,3],
-          19 : [13,9,21],
-          1:   [13,9,3],
-          25 : [13,15,21],
-          7 :  [13,15,3] }
-
     """#Read the goal and current state of the drone"""
 
     def read_rviz_goal(self,msg):        
       self.cur_goal = [msg.pose.position.x,msg.pose.position.y,msg.pose.position.z]
       rospy.loginfo(self.cur_goal)
+      self.stop_jps = 0
       if self.debug_en:
-        rospy.loginfo("New goal!")  
+        rospy.loginfo("New goal!", self.cur_goal)  
+
+    def read_goal(self, msg):
+      if not([msg.point.x, msg.point.y, msg.point.z] == self.cur_goal):
+        self.cur_goal = [msg.point.x, msg.point.y, msg.point.z]
+        print("New goal received : ", self.cur_goal)
+        self.stop_jps = 0
       
     def read_state(self,msg):
-      self.cntr += 1
       self.cur_state = [msg.pos.x,msg.pos.y, msg.pos.z]
       d_to_goal = self.calc_dist_btw_nodes(self.cur_state, self.cur_goal,self.EUCLIDEAN_DIST)
-      #print("Cur distance to goal", d_to_goal,self.cur_state  )
-      if d_to_goal < self.STOP_DISTANCE:
+      #print("Cur distance to goal", d_to_goal,self.ALLOWED_GOAL_POS_ERR,self.cur_state,self.cur_goal)
+      if d_to_goal < self.STOP_DISTANCE and self.stop_jps == 0:
         self.stop_jps = 1
-        print("Reached the goal")
-      else:
-        if self.debug_en:
-          rospy.loginfo(self.cntr)
-          rospy.loginfo(self.cur_state)      
+        print("Reached the end goal.......")     
 
-    """Generate the 3D Map from the point clouds containing occupancy and costs (5D array)
-    
-    ###Read the nulti-array and generate the 3D Map"""
+    """Generate the 3D Map from the point clouds containing occupancy info"""
 
     def read_map(self,pointClouds):
       self.map_points.points = pointClouds.points
       self.occupancy_sts.values = pointClouds.channels[0].values
-      #print(self.occupancy_sts.values)
-      self.grid = pointClouds.channels[0].values
       self.num_of_cells = len(pointClouds.points)
       if self.stop_jps == 0:        
         self.start = time.time()
@@ -225,19 +194,9 @@ class globalPlanner:
           self.get_next_state()          
         else:         
           print("length of grid received is ", len(pointClouds.points), "which is invalid !")
-    
-    """###Update path nodes list"""
-    def update_path_nodes_list(self,cur_state):
-      start_appending = False
-      updated_nodes_list = []
-      for node in self.path_nodes_list:
-        if start_appending:
-          updated_nodes_list.append(node)
-        if self.is_same_node(node, cur_state):
-          start_appending = True
-      return updated_nodes_list
 
     """###Get projected goal for current JPS iteration"""
+
     def get_projected_goal(self):
       min_d_goal = self.INIFINITY 
       for i in range(0, self.num_of_cells):
@@ -247,7 +206,6 @@ class globalPlanner:
           if d_goal < min_d_goal:
             min_d_goal = d_goal
             self.proj_cur_goal = cur_point
-      #print("Cur projected goal pt ", self.proj_cur_goal)
     
 
     """###Calculate distance between nodes"""
@@ -264,19 +222,14 @@ class globalPlanner:
 
     def get_next_state(self):
       self.path_nodes_list = []
-      #print("Searching with JPS...")
-      #print("Current state = ", self.cur_state_in_grid)
       self.goal_reached = False
       self.total_path_cost += self.COST_EMPTY_CELL
       self.get_projected_goal()
       next_states, path_cost, sts = self.get_jps_successors()
-      print("Path valid = ", self.is_path_valid(next_states))
       if sts:
         self.total_path_cost += path_cost
-        #print("next jumps =", next_states)
         for next_state in next_states:
           self.path_nodes_list.append(next_state)
-      #print("Publish ", self.cur_state_in_grid,self.path_nodes_list)
       self.publish_global_plan()
       #If end goal is reached
       if self.has_reached_goal(next_states[-1],self.cur_goal):
@@ -303,8 +256,10 @@ class globalPlanner:
           "left_up" :           18  ,
           "left_down" :          0  ,
           "right_up" :          24  ,
-          "right_down" :         6      
+          "right_down" :         6  .
+          "cur_position" :       12,    
       }"""
+
     def select_moves(self, cur_state):
       min_dist = self.INIFINITY
       best_move = 12
@@ -315,10 +270,10 @@ class globalPlanner:
           if dist < min_dist:
             min_dist = dist
             best_move = move
-      #print("Best move =", best_move)
       return best_move
 
     """###Calculate jps jump nodes"""
+
     def get_jps_successors(self):
       possible_paths_dict ={}     
       cur_path_cost = 0
@@ -384,7 +339,7 @@ class globalPlanner:
             num_of_paths_checked += 1
             cur_path.append(self.proj_cur_goal) 
             possible_paths_dict[cur_path_cost] = cur_path
-            print("Projected goal reached!")
+            print("Projected goal reached!",self.proj_cur_goal)
 
             #If no more paths to check
             if num_of_paths_to_check == num_of_paths_checked:
@@ -394,13 +349,11 @@ class globalPlanner:
               nxt_paths = list(paths.keys())
               nxt_costs = list(costs.keys())
               old_move = 12
-              #print("Paths n costs =",paths)              
+              #print("Paths n costs =",paths)
               self.num_iteration = 0
               if len(nxt_paths) > 0:
-                #print("next paths =", nxt_paths,paths[nxt_paths[0]])
                 num_of_paths_checked += 1
                 cur_path = paths[nxt_paths[0]] 
-                #print("Cur path =", cur_path)
                 cur_grid_node = cur_path[-1]
                 cur_path_cost = costs[nxt_costs[0]] 
                 #Delete traversed path        
@@ -457,7 +410,7 @@ class globalPlanner:
         neigh_nodes.append(neigh_node_coord)
         neigh_nodes_sts.append(self.is_reachable(neigh_node_coord))
         if self.has_reached_goal(neigh_node_coord,self.proj_cur_goal):
-          print("Reached current goal!")
+          print("Reached current projected goal!")
           self.reached_cur_goal = True
           next_neighbour.append(neigh_node_coord)
           return next_neighbour , self.COST_GOAL
@@ -530,25 +483,13 @@ class globalPlanner:
           break
         node_idx += 1
       return occ_sts
-
-    """###Set mode to straight or diagonal"""
-    def straight_or_diag(self,num):       
-      if self.STRAIGHT_MOVES.count(num) > 0:
-        nxt_move = self.STRAIGHT
-      elif self.DIAGONAL1_MOVES.count(num) > 0:
-        nxt_move = self.DIAGONAL1
-      elif self.DIAGONAL2_MOVES.count(num) > 0:
-        nxt_move = self.DIAGONAL2
-      return nxt_move
       
     """###Convert offsets back to coordinates"""
     def get_coordinates(self,offset,cur_position):
       off_position = cur_position    
       coordinates_off = (self.coord_offset_dict[offset])
       cur_offset = [off*self.RESOLUTION for off in coordinates_off]
-      #print("Off =",offset, "Pos =", cur_position)
-      off_position = [cur_position[i]+cur_offset[i] for i in range(0,3)]
-    
+      off_position = [cur_position[i]+cur_offset[i] for i in range(0,3)]    
       return off_position
   
     """#Publish the Path"""
@@ -621,11 +562,13 @@ if __name__ == '__main__':
         globalPlanner_o = globalPlanner()
         rate = rospy.Rate(100)
 #Subscribers        
+        rospy.Subscriber("goal_loc", PointStamped, globalPlanner_o.read_goal)
         rospy.Subscriber("/SQ01s/state" , State, globalPlanner_o.read_state)
         rospy.Subscriber("grid_publisher" , PointCloud, globalPlanner_o.read_map)
         rospy.Subscriber("/move_base_simple/goal", PoseStamped, globalPlanner_o.read_rviz_goal)
         while (not rospy.is_shutdown()):
-          globalPlanner_o.publish_sim_path()
+          if globalPlanner_o.sim_en:
+            globalPlanner_o.publish_sim_path()
           rate.sleep()
 	#Infinite Loop
     except rospy.ROSInterruptException:  pass
