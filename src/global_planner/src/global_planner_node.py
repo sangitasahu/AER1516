@@ -3,7 +3,7 @@
 import math
 import rospy
 from snapstack_msgs.msg import Goal, State
-from geometry_msgs.msg import PoseStamped, Vector3
+from geometry_msgs.msg import PoseStamped, Vector3, PointStamped
 from nav_msgs.msg import Path
 from sensor_msgs.msg import PointCloud, ChannelFloat32
 from std_msgs.msg import Header
@@ -78,7 +78,7 @@ class globalPlanner:
       
         #Publishers
         self.global_path_pub = rospy.Publisher('global_plan', Path, queue_size=100)
-        self.goal_pub = rospy.Publisher('/SQ01s/goal', Goal, queue_size=100)
+        # self.goal_pub = rospy.Publisher('/SQ01s/goal', Goal, queue_size=100)
 
         #Dictionaries
         self.coord_offset_dict = {
@@ -120,7 +120,7 @@ class globalPlanner:
           "forward_left_down" :  2  ,   #1
           "forward_right_up" :  26  ,   #25
           "forward_right_down" : 8  ,   #7
-          "left" :               9  ,
+          "left" :               9  , 
           "right" :             15  ,
           "up" :                21  ,
           "down" :               3  ,
@@ -137,6 +137,10 @@ class globalPlanner:
       rospy.loginfo(self.cur_goal)
       if self.debug_en:
         rospy.loginfo("New goal!")  
+
+    def read_goal_loc(self,msg):        
+      self.cur_goal = [msg.point.x,msg.point.y,msg.point.z]
+      # rospy.loginfo(self.cur_goal) 
       
     def read_state(self,msg):
       self.cntr += 1
@@ -145,7 +149,7 @@ class globalPlanner:
       #print("Cur distance to goal", d_to_goal,self.cur_state  )
       if d_to_goal < self.STOP_DISTANCE:
         self.stop_jps = 1
-        print("Reached the goal")
+        # print("Reached the goal")
       else:
         if self.debug_en:
           rospy.loginfo(self.cntr)
@@ -164,11 +168,11 @@ class globalPlanner:
         self.proj_cur_goal = self.get_projected_goal()
         self.start = time.time()
         if len(pointClouds.points) == 27: 
-          print("Searching with JPS...")       
+          # print("Searching with JPS...")       
           self.get_next_state()
         else:
           rospy.loginfo(len(pointClouds.points))
-          print("length of grid received is not 27")
+          # print("length of grid received is not 27")
 
     """###Get projected goal for current JPS iteration"""
     def get_projected_goal(self):
@@ -296,7 +300,7 @@ class globalPlanner:
           self.nxt_goal.v.x = 2.5
           self.nxt_goal.yaw = 0.1
           self.nxt_goal.header = self.header    
-      self.goal_pub.publish(self.nxt_goal)
+      # self.goal_pub.publish(self.nxt_goal)
 
 """#Main module"""
 
@@ -305,10 +309,13 @@ if __name__ == '__main__':
     try:
         globalPlanner_o = globalPlanner()
         rate = rospy.Rate(100)
-#Subscribers        
+        #Subscribers        
         rospy.Subscriber("/SQ01s/state" , State, globalPlanner_o.read_state)
         rospy.Subscriber("grid_publisher" , PointCloud, globalPlanner_o.read_map)
-        rospy.Subscriber("/move_base_simple/goal", PoseStamped, globalPlanner_o.read_rviz_goal)
+        # rospy.Subscriber("/move_base_simple/goal", PoseStamped, globalPlanner_o.read_rviz_goal)
+
+        # Subscribe to goal location
+        rospy.Subscriber("goal_loc", PointStamped,globalPlanner_o.read_goal_loc)
         while (not rospy.is_shutdown()):
           globalPlanner_o.publish_sim_path()
           rate.sleep()

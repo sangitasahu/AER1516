@@ -38,11 +38,11 @@ class local_planner_test_talker:
                                  [[-1,0,0],[0,0,-1]]])
         plane_coefs_fake = np.array([[2,2],
                                  [12,-7],
-                                 [-15,-3]])
+                                 [-15,-1]])
 
         # 2 point problem
         ic_p = np.array([0,0,3])
-        bc_p = np.array([20,20,5])
+        bc_p = np.array([20,20,3])
         self.positions = np.array([ic_p,bc_p])
 
         # Published values

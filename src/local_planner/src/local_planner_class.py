@@ -30,7 +30,7 @@ from master_node.msg import MasterNodeState
 
 class LocalPlanner(object):
     "Local Planner Class"
-    def __init__(self,replan_freq,goal_freq):
+    def __init__(self,replan_freq,goal_freq,fake_dyn_freq):
         
         # Storage
         # Inputs
@@ -66,6 +66,7 @@ class LocalPlanner(object):
         # Run rates
         self.replan_freq = replan_freq
         self.goal_freq = goal_freq
+        self.fake_dynamics_freq = fake_dyn_freq
 
         # Vehicle limits
         self.v_max = 3 # m/s
@@ -85,7 +86,7 @@ class LocalPlanner(object):
         self.set_var_names = True # Label variable names or not. Performance is allegedly faster without
 
         # Time line search parameters
-        self.f = 2 # Factor on constant motion solution. Start conservatively
+        self.f = 2.25 # Factor on constant motion solution. Start conservatively
         self.alpha = 1.25 # Replanning time factor to plan from on old solution
         self.gamma_up = 1 # Limit on how much time factor can increase/decrease on each timestep
         self.gamma_down = 0.25
@@ -105,6 +106,8 @@ class LocalPlanner(object):
         self.task.set_Stream(self.log_settings, self.streamprinter) # Optimizer output
         self.task.putintparam(mosek.iparam.infeas_report_auto, mosek.onoffkey.on) # Infeasibility report
         self.task.putintparam(mosek.iparam.max_num_warnings,1) # Warning suppression(zeroing out constraints creates warnings)
+
+        self.task.putintparam(mosek.iparam.opf_write_solutions,mosek.onoffkey.off)
 
         self.goal_log = True
         self.goal_log_int = 100
@@ -190,9 +193,12 @@ class LocalPlanner(object):
         self.yaw_filt_coef = (2*pi*self.yaw_filt_cutoff/self.goal_freq)/(1+2*pi*self.yaw_filt_cutoff/self.goal_freq)
 
         # Option to plan from future or last reported state
-        self.plan_start_future = True
+        self.plan_start_future = False
         self.plan_future_t_fac = 1.25 # Factor to apply to execution time from last replanning iteration. Make sure we can find a new plan in time
         self.replan_time_prev = 0 # First replan should be immediate
+
+        # Fake dynamics parameters
+        self.fake_IMU = np.zeros(3)
 
         # Start time
         self.t_start_int_debug = rospy.get_rostime()
@@ -246,7 +252,7 @@ class LocalPlanner(object):
                 for j in range(self.n_cp):
                     for k in range(self.n_int_max):
                         for l in range(self.n_plane_max):
-                            ind_coll_this = self.ind_coll + self.n_plane_max*(k+self.n_int_max*(j+self.n_cp*i))
+                            ind_coll_this = self.ind_coll + self.n_plane_max*(k+self.n_int_max*(j+self.n_cp*i)) + l
                             self.task.putconname(ind_coll_this,
                                             'coll_{}_{}_{}_{}'.format(i,j,k,l))
             
@@ -469,8 +475,10 @@ class LocalPlanner(object):
 
     def replan(self):
         # Check inputs initialized
+        #rospy.loginfo("Conditions: {} {} {} {}".format(self.received_state,self.received_glob_plan,self.received_cvx_decomp,self.master_node_state.state))
         if not (self.received_state and self.received_glob_plan and 
-                self.received_cvx_decomp and self.received_global_goal):
+                self.received_cvx_decomp and self.received_global_goal and self.master_node_state.state == self.master_node_state.FLIGHT_LOCAL):
+            #rospy.loginfo("Conditions: {} {} {} {}".format(self.received_state,self.received_glob_plan,self.received_cvx_decomp,self.master_node_state.state))
             return
 
         # Get start time
@@ -548,12 +556,22 @@ class LocalPlanner(object):
                 a_0 = np.zeros(3)
             elif t_plan_start > self.t_traj_opt_start:
                 # Interpolate on most recent optimal trajectory result
-                a_0 = bezier_interpolate(self.cp_a_opt.reshape(self.n_cp-2,3,self.n_seg,order='F').swapaxes(0,1),
+                a_0_future = bezier_interpolate(self.cp_a_opt.reshape(self.n_cp-2,3,self.n_seg,order='F').swapaxes(0,1),
                                         self.dT_traj_opt*np.ones(self.n_seg),t_plan_start-self.t_traj_opt_start,n=1).flatten()
+                # a_0_curr = bezier_interpolate(self.cp_a_opt.reshape(self.n_cp-2,3,self.n_seg,order='F').swapaxes(0,1),
+                #                         self.dT_traj_opt*np.ones(self.n_seg),t_replan_start_s-self.t_traj_opt_start,n=1).flatten()
+                # Add to current fake IMU measurement the extra amount of acceleration we predict in the future when following our trajectory
+                # a_0 = self.fake_IMU + a_0_future - a_0_curr
+                a_0 = a_0_future
             else:
                 # Won't have yet reached most recent optimal trajectory result, stick to committed trajectory
-                a_0 = bezier_interpolate(self.cp_a_comm.reshape(self.n_cp-2,3,self.n_seg,order='F').swapaxes(0,1),
+                a_0_future = bezier_interpolate(self.cp_a_comm.reshape(self.n_cp-2,3,self.n_seg,order='F').swapaxes(0,1),
                                         self.dT_traj_comm*np.ones(self.n_seg),t_plan_start-self.t_traj_comm_start,n=1).flatten()
+                # a_0_curr = bezier_interpolate(self.cp_a_comm.reshape(self.n_cp-2,3,self.n_seg,order='F').swapaxes(0,1),
+                #                         self.dT_traj_comm*np.ones(self.n_seg),t_replan_start_s-self.t_traj_opt_start,n=1).flatten()
+                # Add to current fake IMU measurement the extra amount of acceleration we predict in the future when following our trajectory
+                # a_0 = self.fake_IMU + a_0_future - a_0_curr
+                a_0 = a_0_future
             
         x_f = np.array([global_plan.poses[n_glob_last-1].pose.position.x,
                         global_plan.poses[n_glob_last-1].pose.position.y,
@@ -762,14 +780,15 @@ class LocalPlanner(object):
             # Bad exit code. Keep working off of existing solution
             rospy.loginfo("Bad solver exit status: {}, {}".format(str(prosta), str(solsta)))
             rospy.loginfo("At t = {:.1f} s".format(t_soln.to_sec()))
+            #self.task.writedata('second_run.ptf')
+            #self.task.writedata('second_run.opf')
+            #self.task.writedata('second_run.lp')
             return
         else:
             rospy.loginfo("Successful solution: {}, {}".format(str(prosta), str(solsta)))
             rospy.loginfo("At t = {:.1f} s. Solve time: {:.1f} ms".format(t_soln.to_sec(),
                                                                             1000*(t_soln.to_sec()-t_replan_start_s)))
-        
-        if not self.opt_run:
-            self.opt_run = True
+            rospy.loginfo("Fake IMU {}".format(self.fake_IMU))
 
         # Store solution for use in output
         # TODO: May need to consider thread safety
@@ -803,6 +822,17 @@ class LocalPlanner(object):
         # Store replan time for adjustments on future iterations
         t_replan_finish = rospy.get_rostime()
         self.replan_time_prev = (t_replan_finish-t_replan_start).to_sec()
+        rospy.loginfo('Replanning Time: {:.1f} ms'.format(self.replan_time_prev*1000))
+
+        # if np.max(np.abs(self.cp_j_opt))>7:
+        #     stupid = 5
+
+        # Have completed a replanning iteration, can start publishing goal location
+        if not self.opt_run:
+            #self.task.writedata('first_run.ptf')
+            #self.task.writedata('first_run.opf')
+            # self.task.writedata('first_run.lp')
+            self.opt_run = True
 
     def update_goal(self):
 
@@ -819,6 +849,7 @@ class LocalPlanner(object):
             self.cp_p_comm = self.cp_p_opt
             self.cp_v_comm = self.cp_v_opt
             self.cp_a_comm = self.cp_a_opt
+            self.cp_j_comm = self.cp_j_opt
             self.bin_comm = self.bin_opt
             self.t_traj_comm_start = self.t_traj_opt_start
             self.dT_traj_comm = self.dT_traj_opt
@@ -865,6 +896,20 @@ class LocalPlanner(object):
         
         self.goal = goal_new
 
+    def fake_dynamics(self):
+        # Integrate jerk to fake having an IMU onboard
+        if not self.opt_run:
+            return
+
+        # Interpolate jerk at current time and integrate with first order Euler
+        t_curr = rospy.get_rostime()
+        t_curr_s = t_curr.to_sec()
+        
+        jerk_interp = bezier_interpolate(self.cp_j_comm.reshape(self.n_cp-3,3,self.n_seg,order='F').swapaxes(0,1),
+                                        self.dT_traj_comm*np.ones(self.n_seg),t_curr_s-self.t_traj_comm_start,n=0).flatten()
+
+        self.fake_IMU = self.fake_IMU + jerk_interp/self.fake_dynamics_freq
+    
     def streamprinter(self,text):
         # Define a stream printer to grab output from MOSEK
         sys.stdout.write(text)

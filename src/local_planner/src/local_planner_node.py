@@ -27,11 +27,12 @@ class LocalPlannerNode(object):
     def __init__(self):
 
         # Rates
-        self.replan_freq = 0.2
+        self.replan_freq = 1
         self.goal_freq = 100
+        self.fake_dynamics_freq = 100
 
         # Objects
-        self.local_planner = LocalPlanner(self.replan_freq,self.goal_freq)
+        self.local_planner = LocalPlanner(self.replan_freq,self.goal_freq,self.fake_dynamics_freq)
 
         # Subscribers
         self.state_topic = '/SQ01s/state'
@@ -54,6 +55,7 @@ class LocalPlannerNode(object):
         # Timers
         self.replan_timer = rospy.Timer(rospy.Duration(1.0/self.replan_freq),self.replan_callback)
         self.update_goal_timer = rospy.Timer(rospy.Duration(1.0/self.goal_freq),self.update_goal_callback)
+        self.fake_dynamics_timer = rospy.Timer(rospy.Duration(1.0/self.fake_dynamics_freq),self.fake_dynamics_callback)
 
     def state_sub_callback(self,msg):
         # TODO: May need to consider thread safety
@@ -86,12 +88,18 @@ class LocalPlannerNode(object):
     def replan_callback(self,event):
         # Execute replanning step and publish path for visualization
         self.local_planner.replan()
-        self.path_pub.publish(self.local_planner.local_plan)
+        if self.local_planner.opt_run:
+            self.path_pub.publish(self.local_planner.local_plan)
 
     def update_goal_callback(self,event):
         # Interpolate goal at current point in time and publish
         self.local_planner.update_goal()
-        self.local_goal_pub.publish(self.local_planner.goal)
+        if self.local_planner.opt_run:
+            self.local_goal_pub.publish(self.local_planner.goal)
+
+    def fake_dynamics_callback(self,event):
+        # Interpolate goal at current point in time and publish
+        self.local_planner.fake_dynamics()
 
 if __name__ == '__main__':
     try:
