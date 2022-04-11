@@ -10,7 +10,7 @@ from cmath import pi
 from enum import Enum
 
 # Import libraries
-import sys, copy
+import sys, copy, threading
 import rospy
 import numpy as np
 import mosek as mosek
@@ -68,8 +68,11 @@ class LocalPlanner(object):
         self.goal_freq = goal_freq
         self.fake_dynamics_freq = fake_dyn_freq
 
+        # Locks
+        self.trajectory_lock = threading.Lock()
+
         # Vehicle limits
-        self.v_max = 3 # m/s
+        self.v_max = 5 # m/s
         self.a_max = 10 # m/s2
         self.j_max = 50 # m/s3
 
@@ -167,6 +170,7 @@ class LocalPlanner(object):
         self.cp_a_opt = np.zeros(self.num_accel)
         self.cp_j_opt = np.zeros(self.num_jerk)
         self.bin_opt = np.zeros(self.num_bin)
+        self.soln_no_opt = 0
 
         self.t_traj_opt_start = 0
         self.dT_traj_opt = 10
@@ -179,6 +183,7 @@ class LocalPlanner(object):
         self.cp_a_comm = np.zeros(self.num_accel)
         self.cp_j_comm = np.zeros(self.num_jerk)
         self.bin_comm = np.zeros(self.num_bin)
+        self.soln_no_comm = 0
 
         self.t_traj_comm_start = 0
         self.dT_traj_comm = 10 # Nonzero value, avoid zero division
@@ -193,7 +198,7 @@ class LocalPlanner(object):
         self.yaw_filt_coef = (2*pi*self.yaw_filt_cutoff/self.goal_freq)/(1+2*pi*self.yaw_filt_cutoff/self.goal_freq)
 
         # Option to plan from future or last reported state
-        self.plan_start_future = False
+        self.plan_start_future = True
         self.plan_future_t_fac = 1.25 # Factor to apply to execution time from last replanning iteration. Make sure we can find a new plan in time
         self.replan_time_prev = 0 # First replan should be immediate
 
@@ -528,8 +533,13 @@ class LocalPlanner(object):
             if self.plan_start_future:
                 t_plan_start = t_replan_start_s + self.plan_future_t_fac*self.replan_time_prev
             else:
-                t_plan_start = t_replan_start_s
+                t_plan_start = state_start.header.stamp.to_sec()
 
+            # Skip this replanning step if haven't begun to use last optimal trajectory. Saves a ton of overhead
+            # TODO: This could be improved
+            if not t_replan_start_s > self.t_traj_opt_start:
+                return
+            
             # Position and velocity depends on if we plan from current or future state
             if self.plan_start_future and self.opt_run:
                 # Interpolate either committed or most recent optimal trajectory result, depending on which is appropriate
@@ -572,7 +582,7 @@ class LocalPlanner(object):
                 # Add to current fake IMU measurement the extra amount of acceleration we predict in the future when following our trajectory
                 # a_0 = self.fake_IMU + a_0_future - a_0_curr
                 a_0 = a_0_future
-            
+
         x_f = np.array([global_plan.poses[n_glob_last-1].pose.position.x,
                         global_plan.poses[n_glob_last-1].pose.position.y,
                         global_plan.poses[n_glob_last-1].pose.position.z])
@@ -780,9 +790,7 @@ class LocalPlanner(object):
             # Bad exit code. Keep working off of existing solution
             rospy.loginfo("Bad solver exit status: {}, {}".format(str(prosta), str(solsta)))
             rospy.loginfo("At t = {:.1f} s".format(t_soln.to_sec()))
-            #self.task.writedata('second_run.ptf')
             #self.task.writedata('second_run.opf')
-            #self.task.writedata('second_run.lp')
             return
         else:
             rospy.loginfo("Successful solution: {}, {}".format(str(prosta), str(solsta)))
@@ -793,19 +801,22 @@ class LocalPlanner(object):
         # Store solution for use in output
         # TODO: May need to consider thread safety
         self.task.getxx(mosek.soltype.itg,self.xx)
+
+        # Acquire lock to update trajectory
+        self.trajectory_lock.acquire()
         self.cp_p_opt = self.xx[0:self.ind_vel]
         self.cp_v_opt = self.xx[self.ind_vel:self.ind_accel]
         self.cp_a_opt = self.xx[self.ind_accel:self.ind_jerk]
         self.cp_j_opt = self.xx[self.ind_jerk:self.ind_bin]
         self.bin_opt = self.xx[self.ind_bin:self.ind_bin + self.num_bin]
-
-        self.t_traj_opt_start = state_start.header.stamp.to_sec()
+        self.dT_traj_opt = dT
+        self.t_traj_opt_start = t_plan_start
+        self.soln_no_opt = self.soln_no_opt + 1
+        self.trajectory_lock.release() # Job's done!
 
         # Fake planning option just runs from starting position
         if self.fake_plan:
             self.t_traj_opt_start = self.t_start_plan
-        
-        self.dT_traj_opt = dT
 
         # Update path for visualization. Interpolate position values along entire length
         # TODO: Can probably clean the ordering on this one up. Reshape/swap axes works but is confusing
@@ -824,14 +835,9 @@ class LocalPlanner(object):
         self.replan_time_prev = (t_replan_finish-t_replan_start).to_sec()
         rospy.loginfo('Replanning Time: {:.1f} ms'.format(self.replan_time_prev*1000))
 
-        # if np.max(np.abs(self.cp_j_opt))>7:
-        #     stupid = 5
-
         # Have completed a replanning iteration, can start publishing goal location
         if not self.opt_run:
-            #self.task.writedata('first_run.ptf')
-            #self.task.writedata('first_run.opf')
-            # self.task.writedata('first_run.lp')
+            # self.task.writedata('first_run.opf')
             self.opt_run = True
 
     def update_goal(self):
@@ -845,14 +851,19 @@ class LocalPlanner(object):
 
         # See if we should update committed trajectory to latest optimal trajectory
         # TODO: Potentially need to address thread safety here, optimizer could be finishing as this runs
-        if t_curr_s>self.t_traj_opt_start:
-            self.cp_p_comm = self.cp_p_opt
-            self.cp_v_comm = self.cp_v_opt
-            self.cp_a_comm = self.cp_a_opt
-            self.cp_j_comm = self.cp_j_opt
-            self.bin_comm = self.bin_opt
+        # if t_curr_s>self.t_traj_opt_start:
+        if self.soln_no_opt > self.soln_no_comm and t_curr_s>self.t_traj_opt_start:
+            # Time to update committed trajectory, get lock
+            self.trajectory_lock.acquire()
+            self.cp_p_comm = self.cp_p_opt.copy()
+            self.cp_v_comm = self.cp_v_opt.copy()
+            self.cp_a_comm = self.cp_a_opt.copy()
+            self.cp_j_comm = self.cp_j_opt.copy()
+            self.bin_comm = self.bin_opt.copy()
             self.t_traj_comm_start = self.t_traj_opt_start
             self.dT_traj_comm = self.dT_traj_opt
+            self.soln_no_comm = self.soln_no_opt
+            self.trajectory_lock.release() # All done
 
         goal_p_interp = bezier_interpolate(self.cp_p_comm.reshape(self.n_cp,3,self.n_seg,order='F').swapaxes(0,1),
                                             self.dT_traj_comm*np.ones(self.n_seg),t_curr_s-self.t_traj_comm_start,n=3).flatten()

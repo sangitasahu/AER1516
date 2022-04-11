@@ -49,13 +49,16 @@ class local_planner_test_talker:
         self.global_plan = Path()
         self.cvx_decomp = CvxDecomp()
 
+        new_path_header = Header(stamp=rospy.get_rostime(),frame_id = "world")
+
         pose_list = []
         for i in range(self.positions.shape[0]):
-            pose_new = PoseStamped(pose=Pose(position=Point(x = self.positions[i,0],
+            pose_new = PoseStamped(header = new_path_header, pose=Pose(position=Point(x = self.positions[i,0],
                                                     y = self.positions[i,1],
                                                     z = self.positions[i,2])))
             pose_list.append(pose_new)
         self.global_plan.poses = pose_list
+        self.global_plan.header = new_path_header
 
         # plane_list = []
         # for i in range(self.planes.shape[0]):

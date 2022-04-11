@@ -27,7 +27,7 @@ class LocalPlannerNode(object):
     def __init__(self):
 
         # Rates
-        self.replan_freq = 1
+        self.replan_freq = 10
         self.goal_freq = 100
         self.fake_dynamics_freq = 100
 

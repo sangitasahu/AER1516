@@ -165,6 +165,7 @@ include_directories(
 catkin_install_python(PROGRAMS
    src/local_planner_node.py
    test_nodes/test_talker.py
+   test_nodes/test_timer.py
    DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
  )
 
