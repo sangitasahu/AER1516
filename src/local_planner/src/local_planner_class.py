@@ -90,11 +90,9 @@ class LocalPlanner(object):
 
         # Time line search parameters
         self.f = 2.25 # Factor on constant motion solution. Start conservatively
-        self.alpha = 1.25 # Replanning time factor to plan from on old solution
-        self.gamma_up = 1 # Limit on how much time factor can increase/decrease on each timestep
+        self.gamma_up = 0.5 # Limit on how much time factor can increase/decrease on each timestep
         self.gamma_down = 0.25
-        self.step_up = 0.5 # Step size for line search
-        self.step_down = 0.25
+        self.gamma_step = 0.25
 
         # Start MOSEK and initialize variables
         self.msk_env = mosek.Env()
@@ -480,10 +478,8 @@ class LocalPlanner(object):
 
     def replan(self):
         # Check inputs initialized
-        #rospy.loginfo("Conditions: {} {} {} {}".format(self.received_state,self.received_glob_plan,self.received_cvx_decomp,self.master_node_state.state))
         if not (self.received_state and self.received_glob_plan and 
                 self.received_cvx_decomp and self.received_global_goal and self.master_node_state.state == self.master_node_state.FLIGHT_LOCAL):
-            #rospy.loginfo("Conditions: {} {} {} {}".format(self.received_state,self.received_glob_plan,self.received_cvx_decomp,self.master_node_state.state))
             return
 
         # Get start time
@@ -551,6 +547,7 @@ class LocalPlanner(object):
                                             self.dT_traj_opt*np.ones(self.n_seg),t_plan_start-self.t_traj_opt_start,n=2).flatten()
                 else:
                     # Won't have yet reached most recent optimal trajectory result, stick to committed trajectory
+                    # TODO: Think can delete this case
                     x_0 = bezier_interpolate(self.cp_p_comm.reshape(self.n_cp,3,self.n_seg,order='F').swapaxes(0,1),
                                             self.dT_traj_comm*np.ones(self.n_seg),t_plan_start-self.t_traj_comm_start,n=3).flatten()
                     v_0 = bezier_interpolate(self.cp_v_comm.reshape(self.n_cp-1,3,self.n_seg,order='F').swapaxes(0,1),
@@ -575,6 +572,7 @@ class LocalPlanner(object):
                 a_0 = a_0_future
             else:
                 # Won't have yet reached most recent optimal trajectory result, stick to committed trajectory
+                # TODO: Think can delete this case
                 a_0_future = bezier_interpolate(self.cp_a_comm.reshape(self.n_cp-2,3,self.n_seg,order='F').swapaxes(0,1),
                                         self.dT_traj_comm*np.ones(self.n_seg),t_plan_start-self.t_traj_comm_start,n=1).flatten()
                 # a_0_curr = bezier_interpolate(self.cp_a_comm.reshape(self.n_cp-2,3,self.n_seg,order='F').swapaxes(0,1),
@@ -796,14 +794,12 @@ class LocalPlanner(object):
             rospy.loginfo("Successful solution: {}, {}".format(str(prosta), str(solsta)))
             rospy.loginfo("At t = {:.1f} s. Solve time: {:.1f} ms".format(t_soln.to_sec(),
                                                                             1000*(t_soln.to_sec()-t_replan_start_s)))
-            rospy.loginfo("Fake IMU {}".format(self.fake_IMU))
+            # rospy.loginfo("Fake IMU {}".format(self.fake_IMU))
 
         # Store solution for use in output
-        # TODO: May need to consider thread safety
-        self.task.getxx(mosek.soltype.itg,self.xx)
-
         # Acquire lock to update trajectory
         self.trajectory_lock.acquire()
+        self.task.getxx(mosek.soltype.itg,self.xx)
         self.cp_p_opt = self.xx[0:self.ind_vel]
         self.cp_v_opt = self.xx[self.ind_vel:self.ind_accel]
         self.cp_a_opt = self.xx[self.ind_accel:self.ind_jerk]
@@ -927,6 +923,7 @@ class LocalPlanner(object):
         sys.stdout.flush()
 
     def replan_debug(self):
+        # TODO: Should be able to delete these
         # Print interfaces to demonstrate they're coming in properly
         rospy.loginfo("Global Plan Position 1: %s",self.glob_plan.poses[0].pose.position)
         rospy.loginfo("Global Plan Position 2: %s",self.glob_plan.poses[1].pose.position)
@@ -938,6 +935,7 @@ class LocalPlanner(object):
         rospy.loginfo("Plane 2: %s",plane_2)
 
     def update_goal_debug(self):
+        # TODO: Should be able to delete these
         # Fudge the goal location
         curr_time = rospy.get_rostime()
         dt = curr_time-self.t_start_int_debug
