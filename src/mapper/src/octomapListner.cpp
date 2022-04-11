@@ -62,7 +62,7 @@ void octomap_binary_callback(const octomap_msgs::OctomapConstPtr& octomap_msg)
     std::shared_ptr<octomap::OcTree> octree = std::shared_ptr<octomap::OcTree> (dynamic_cast<octomap::OcTree*> (octomap_msgs::msgToMap(* octomap_msg)));
 
     
-    float bbx_range = 1.;
+    float bbx_range = 5.;
     float resolution = 0.5;
     //int bsize = static_cast<int>((bbx_upper-bbx_lower)/resolution);
     octomap::point3d  min_bbx;

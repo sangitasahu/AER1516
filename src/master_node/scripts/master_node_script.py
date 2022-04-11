@@ -30,7 +30,7 @@ class MasterNode(object):
         self.start_delay = 3 # s
         self.start_x = 2
         self.start_y = 6
-        self.start_z = 0
+        self.start_z = 2
         self.start_yaw = 0
         self.flight_z = 1 # m. Fly at constant height off the ground for simplicity
         self.takeoff_speed = 1 # m/s

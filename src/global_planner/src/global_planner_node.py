@@ -27,14 +27,16 @@ class globalPlanner:
         """#Constants"""
 
         #Map related
-        self.BB_WIDTH = 2   #Can use to find map size
+        self.BB_WIDTH = 1   #Change for different map sizes
         self.STOP_DISTANCE = 1
-        self.RESOLUTION = 0.125
+        self.RESOLUTION = 0.5
         self.X_LIMIT = [0 , 100]
         self.Y_LIMIT = [0,  100]
         self.Z_LIMIT = [0,  30]
         self.ALLOWED_POS_ERR = 2*math.sqrt(self.RESOLUTION)
         self.ALLOWED_GOAL_POS_ERR = 2*math.sqrt(self.RESOLUTION**3)
+        self.NUM_OF_CELLS = int(((self.BB_WIDTH/self.RESOLUTION)+1)**3)
+        self.ORIGIN_CELL_NUM = int((((self.BB_WIDTH/self.RESOLUTION)+1)**2)*(self.BB_WIDTH/(2*self.RESOLUTION)) + ((self.BB_WIDTH/(2*self.RESOLUTION)) * ((self.BB_WIDTH/self.RESOLUTION)+1)))
         #Distance metrics
         self.EUCLIDEAN_DIST = 1
         self.MANHATTAN_DIST = 0
@@ -49,7 +51,7 @@ class globalPlanner:
         self.NOT_OCCUPIED = 0
         #JPS related
         self.MAX_NUM_ITERATIONS = 100
-        self.STRAIGHT_MOVES = [13,9,15,21,3] 
+        self.STRAIGHT_MOVES = [13,9,15,21,3]
         self.DIAGONAL1_MOVES = [10,16,18,0,22,4,24,6]
         self.DIAGONAL2_MOVES = [19,1,25,7]               
         self.MOVES = self.STRAIGHT_MOVES  + self.DIAGONAL1_MOVES + self.DIAGONAL2_MOVES 
@@ -65,7 +67,7 @@ class globalPlanner:
         self.occupancy_sts = ChannelFloat32()
         self.occupancy_sts.name = 'grid occupancy'
         
-        #JPS related
+        #JPS related 
         self.nxt_move_num = 0 #Move number
         self.num_of_cells = 0 
         self.cur_goal = [0,0,0]        
@@ -73,14 +75,14 @@ class globalPlanner:
         self.cur_state = [0,0,0]
         self.path_nodes_list = []
         self.cur_state_in_grid = [0,0,0]
-        self.allowed_lengths = [27, 125, 729]  #For fixed map sizes
         self.total_path_cost=0
         self.visited_nodes_list =[0,0,0]
 
         #For simulation only
         self.sim_en = True   #False when use master node sends goals
         self.sim_path_nodes_list =[]
-        
+        self.sim_grid2 = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+        self.sim_grid1 = [0,0,1,1,0,0,0,0,0, 0,0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,1,1]
         #Control flags and counters
         self.seq_cntr = 0
         self.stop_jps = 0
@@ -135,8 +137,6 @@ class globalPlanner:
         35  : [0,0,2],
         36  : [0,0,-2] }
 
-        self.centre_dict = {27: 12, 125: 60, 729: 360}  #Allowed resolutions
-
         self.neighbor_offsets_dict = {
           13 : [10,11,16,17],
           21 : [18,27,24,28],
@@ -185,11 +185,11 @@ class globalPlanner:
     def read_map(self,pointClouds):
       self.map_points.points = pointClouds.points
       self.occupancy_sts.values = pointClouds.channels[0].values
-      self.num_of_cells = len(pointClouds.points)
+      self.num_of_cells = len(self.occupancy_sts.values)
       if self.stop_jps == 0:        
         self.start = time.time()
-        if self.allowed_lengths.count(len(pointClouds.points)) > 0: 
-          start_state = pointClouds.points[self.centre_dict[self.num_of_cells]]
+        if len(pointClouds.points) == self.NUM_OF_CELLS: 
+          start_state = pointClouds.points[self.ORIGIN_CELL_NUM]
           self.cur_state_in_grid = [start_state.x, start_state.y, start_state.z]    
           self.get_next_state()          
         else:         
