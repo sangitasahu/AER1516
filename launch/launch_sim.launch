@@ -1,0 +1,8 @@
+<launch>
+	<arg name="my_workspace_path" default="/home/matt/AER1516_Project"/>	
+
+	<!-- Launch ACL Gazebo -->
+	<include file="$(arg my_workspace_path)/src/acl-gazebo/acl_sim/launch/start_world.launch" />
+	<include file="$(arg my_workspace_path)/src/acl-gazebo/acl_sim/launch/perfect_tracker_and_sim.launch" />
+
+</launch>
