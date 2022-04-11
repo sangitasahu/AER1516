@@ -4,21 +4,21 @@
 ROS Node for convex decomposition of the space around a segment defined by p1 and p2. 
 
 This ROS node subscribes to the following topics:
-/vicon/ARDroneCarre/ARDroneCarre
+/probability_publisher
+/global_plan
 
 This ROS node publishes to the following topics:
-/cmd_vel_RHC
+/CvxDecomp
+/ellipsoid_disp'
+/polyhedra_disp
+*disp is used to display to RVIZ visualizations
 
 """
-
-from __future__ import division, print_function, absolute_import
-
 # Import ROS libraries
 import sys
 import roslib
 import rospy
 # Import classes
-#from tf.transformations import euler_from_quaternion
 from geometry_msgs.msg import Point
 from std_msgs.msg import Header
 from nav_msgs.msg import Path
@@ -34,13 +34,14 @@ from decomp_ros_msgs.msg import PolyhedronArray as pharray_display
 from decomp_ros_msgs.msg import Ellipsoid as E_display
 from decomp_ros_msgs.msg import EllipsoidArray as Earray_display
 
-#Instantiates objects of classes ROSDesiredPositionGenerator and PositionController
-
+#Define the convex decomposition class
 class cvx_decomp(object):
-    """ROS interface for controlling the Parrot ARDrone in the Vicon Lab."""
-    """Constructor to initialize the ROSControllerNode class"""
+    """
+    cvx_decomp is used to perform a convex decomposition of the free space around obstacles. The setup is an implementation of
+    the : MRSL Decomputil Library v1.0 :https://github.com/sikang/DecompUtil : http://ieeexplore.ieee.org/document/7839930/
+    """
     def __init__(self):
-        # Declare Publisher and Subsciber
+        # Declare Publishers and Subscibers
         self.point_cloud = '/probability_publisher'
         self.path = '/global_plan'
         self.point_cloud_sub = rospy.Subscriber(self.point_cloud,PointCloud,self.point_cloud_proc)
@@ -61,20 +62,20 @@ class cvx_decomp(object):
 
         #self.obs_cloud = PointCloud() #Define type!
         self.obs_cloud = [] #Change to pc if necessary
-        self.obs_cloud = hp.obs_temp()#pcp.get_obs([[1,1,0],[2,2,0],[-2,1,0],[5,5,0],[0,14,0]],[])
-        self.p = [] # from point
-        #self.p = [[2,2,1],[3,2,1],[4,4,1]] #Only to test
-
-        self.n_int_max = 6
-        self.offset_x = 0#.5
-        self.drone_radius = 0#.2
-        self.bbox = [2,2,1]
-        self.path_list = []
-        # Set the controller frequency
-        self.loop_frequency = 1
+        #self.obs_cloud = pcp.get_obs([[1,1,0],[2,2,0],[-2,1,0],[5,5,0],[0,14,0]],[])
+        self.p = [] # placeholder for holding the end points of the segment in question
+        #self.p = [[0,0,1],[0,13,1]]#,[4,4,1]] #Only to test
+        self.path_list = [] #Placeholder for the path poses
+        #############################################
+        self.n_int_max = 6 #Does not do anything for now : plan to use it to limit the number of hyperplanes of the polyhedron
+        self.offset_x = 0.1 #Offset of the ellipsoid around the segment
+        self.drone_radius = 0.1 # Radius of the drone for obstacle inflation 
+        self.bbox = [2,2,1]  # Local bounding box of the convex decomposer
+        #############################################
+        # Set the decomposer frequency
+        self.loop_frequency = 10
         # Run this ROS node at the loop frequency
         self.timers = rospy.Timer(rospy.Duration(1.0 / self.loop_frequency), self.decompose_points)
-        
         # Keep time for differentiation and integration within the controller
         self.old_time = rospy.get_time()
         
@@ -94,14 +95,14 @@ class cvx_decomp(object):
         self.p = [[point.pose.position.x, point.pose.position.y, point.pose.position.z] for point in self.path_list]
         if len(self.p)==1:
             print("Segment cannot be formed since only one point was obtained")
-        #self.p = [[2,3,1],[3,3,1],[4,4,1]] #Only to test
+        #self.p = [[0,0,1],[0,13,1]]#,[4,4,1]] #Only to test
     
     """Function called when timer matures"""
     def decompose_points(self,event):
         # Determine the time step 
         current_time = rospy.get_time()
         dt = current_time - self.old_time
-        #Set header_info for the Publish Message:
+        #Set header_info for the publish message:
         header_info = Header()
         header_info.stamp = rospy.Time.now()
         header_info.frame_id = "vicon"
@@ -119,10 +120,8 @@ class cvx_decomp(object):
             obs = hp.set_obs_Vs(self.obs_cloud,bbox_polyhedron)            
             #Find an ellipsoid around the segment
             C,d = E.find_ellipsoid(p1,p2,self.offset_x,obs,self.drone_radius)
-#            print(C,d)
             #Get the hyperplanes at the extremeties and eliminate the spaces
             cvx_planes = hp.get_hyperplanes(obs,C,d)
-            
             #Add the bounding box and cvx_decomp_planes to obtain inner polyhedrons
             complex_polyhedron = cvx_planes+bbox_polyhedron
             #Simplify the plyhedrons to get inner polyhedrons only 
@@ -130,11 +129,8 @@ class cvx_decomp(object):
             required_polyhedron = plane_utils.eliminate_redundant_planes(complex_polyhedron)
             #print(required_polyhedron)
             vertices = plane_utils.calculate_vertices(complex_polyhedron)
-            
-            
             ###Pending work<<< 
             #FIND A FOOL PROOF WAY TO LIMIT TOTAL NUMBER OF PLANES IN A POLYHEDRA?
-
             #convert polyhedrons from point normal to standard form >> ax+by+cz=d
             plane_pack = []
             polyhedron_ = Polyhedron()
@@ -151,8 +147,6 @@ class cvx_decomp(object):
             for j,pln in enumerate(required_polyhedron):
                 plane = hp.get_standard_form(pln)
                 plane_msg = Plane()
-                
-
                 plane_msg.coef = plane
                 plane_pack.append(plane_msg)
                 #form point msg and normal msgs
@@ -164,10 +158,7 @@ class cvx_decomp(object):
                 normal_msg.x = pln[1][0]
                 normal_msg.y = pln[1][1]
                 normal_msg.z = pln[1][2]
-                
-                
-                #create the pack
-
+                #create the message list
                 normals_pack.append(normal_msg)
                 points_pack.append(point_msg)
 
@@ -175,12 +166,8 @@ class cvx_decomp(object):
             poly_disp_msg.normals = normals_pack
             polyhedron_.planes= plane_pack
             #Make a pack for the array
-
             poly_pack.append(polyhedron_)        
             polyarray_disp_pack.append(poly_disp_msg)
-
-
-
         self.cvx_polyhedra.polyhedra = poly_pack
         self.cvx_polyhedra.header = header_info
         self.pub_CvxDecomp.publish(self.cvx_polyhedra)
@@ -196,5 +183,6 @@ class cvx_decomp(object):
 if __name__ == '__main__':
     # Code to create cvx_decomp
     rospy.init_node('cvx_decomp',disable_signals=True)
+
     cvx_decomp()
     rospy.spin()

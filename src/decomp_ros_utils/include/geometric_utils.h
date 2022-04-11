@@ -144,9 +144,7 @@ inline vec_E<vec_Vec3f> cal_vertices(const Polyhedron3D &poly) {
       if (j == i)
         continue;
       Vec3f nw = vts[j].n_;
-      //std::cout<<" nw:"<<nw<<std::endl;
       Vec3f nb = R.transpose() * nw;
-      //std::cout<<" nb:"<<nb<<std::endl;
       decimal_t bb = vts[j].p_.dot(nw) - nw.dot(t);//distance between t and plane2_p
       Vec2f v = Vec3f(0, 0, 1).cross(nb).topRows<2>(); // line direction
       Vec2f p;                                         // point on the line
@@ -157,36 +155,28 @@ inline vec_E<vec_Vec3f> cal_vertices(const Polyhedron3D &poly) {
       else
         continue;
       lines.push_back(std::make_pair(v, p));
-      //std::cout<<"line: "<<v(0)<<" "<<v(1)<<" "<<p(0)<<" "<<p(1)<<std::endl;
     }
-    std::cout<<"linecomplete intersection check: "<<std::endl;
     //**** find all intersect points
     vec_Vec2f pts = line_intersects(lines);
     //**** filter out points inside polytope
     vec_Vec2f pts_inside;
     for (const auto &it : pts) {
       Vec3f p = R * Vec3f(it(0), it(1), 0) + t; // convert to world frame
-      //std::cout<<"pt,p1,p!:"<<it(0)<<" "<<it(1)<<" t: "<<t(0)<<" "<<t(1)<<" "<<t(2)<<" >>"<<p(0)<<" "<<p(1)<<" "<<p(2)<<std::endl;
-      //std::cout<<"FROMHERE"<<std::endl;
       if (poly.inside(p)){
         pts_inside.push_back(it);
-        //std::cout<<"pt is inside!:"<<it(0)<<" "<<it(1)<<" t: "<<t(0)<<" "<<t(1)<<" "<<t(2)<<" >>"<<p(0)<<" "<<p(1)<<" "<<p(2)<<std::endl;
         }
     }
-    std::cout<<"pts_finished checks"<<std::endl;
     if (pts_inside.size() > 2) {
       //**** sort in plane frame
       pts_inside = sort_pts(pts_inside);
       //**** transform to world frame
       vec_Vec3f points_valid;
       for (auto &it : pts_inside){
-        std::cout<<"pts_inside "<<it(0)<<" " <<it(1)<<std::endl;
         points_valid.push_back(R * Vec3f(it(0), it(1), 0) + t);
       }
       //**** insert resulting polygon
       bds.push_back(points_valid);
     }
-    std::cout<<"plane complete"<<std::endl;
   }
   return bds;
 }

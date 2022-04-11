@@ -56,13 +56,16 @@ def find_ellipsoid(p1,p2,offset_x,obs,inflate_distance):
     d = np.divide((p1+p2),2)
     C =  np.linalg.norm(p1-p2)/2 * np.identity(3)  
     C[0,0] +=   offset_x
-    axes = np.linalg.norm(p1-p2)/2+np.array([offset_x,0,0])
+    axes = np.linalg.norm(p1-p2)/2 + np.array([offset_x,0,0])
     if axes[0]>0:
-        C = C*(axes[1]/axes[2])
-        axes = axes*(axes[1]/axes[2])
+      ratio = axes[1]/axes[2]
+      C = C.dot(ratio)
+      axes = axes.dot(ratio)
+
     R = vec_to_rotation(p2 - p1)
     C = R.dot(C.dot(R.transpose()))
-    d = (p1+p2)/2
+    d = np.divide((p1+p2),2)
+    
     Rf = R
     obs_inflated = []
     obs_preserve = obs
@@ -88,10 +91,7 @@ def find_ellipsoid(p1,p2,offset_x,obs,inflate_distance):
         new_C[1,1]=axes[1]
         new_C[2,2]=axes[1]
         C = Rf.dot(new_C.dot(Rf.transpose()))
-        #print("CHECKHERE",C,d)
         obs_retain = []
-        time.sleep(1)
-        print(obs_inside)
         for pt in obs_inside:
             if (1-dist_pt_ellipsoid_centre(pt,C,d)>eps_limit):                
                 obs_retain.append(pt)
@@ -106,7 +106,6 @@ def find_ellipsoid(p1,p2,offset_x,obs,inflate_distance):
     obs_inside = set_obs_ep(obs,C,d)
     while (obs_inside !=[]):
         pw = closest_pt_ep(obs_inside,C,d)
-        print("pw",pw)
         p=Rf.transpose().dot(pw-d)
         if (1-(p[0]/axes[0])**2 - (p[1]/axes[1])**2 > eps_limit):
             axes[2] = np.abs(p[2]/np.sqrt(1-(p[0]/axes[0])**2 - (p[1]/axes[1])**2))
@@ -115,12 +114,9 @@ def find_ellipsoid(p1,p2,offset_x,obs,inflate_distance):
         new_C[1,1]=axes[1]
         new_C[2,2]=axes[2]
         C = Rf.dot(new_C.dot(Rf.transpose()))
-        time.sleep(1)#############################
         obs_retain = []
-        print(obs_inside)
         for pt in obs_inside:
             if (1-dist_pt_ellipsoid_centre(pt,C,d)>eps_limit):
-                print("THIS:",(1-dist_pt_ellipsoid_centre(pt,C,d)))
                 obs_retain.append(pt)
         obs_inside = obs_retain
     return C,d
