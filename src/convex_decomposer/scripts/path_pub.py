@@ -29,7 +29,7 @@ class pub_path_class(object):
     """ROS interface for controlling the Parrot ARDrone in the Vicon Lab."""
     """Constructor to initialize the ROSControllerNode class"""
     def __init__(self):
-        self.pth = [[7,5,1],[8,5,1]]
+        self.pth = [[13.5,11.5,1],[15,12.5,1],[16,13,1]]
         # Declare Publisher and Subsciber
         
         self.path = '/global_plan'
@@ -46,7 +46,7 @@ class pub_path_class(object):
         #Set header_info for the Publish Message:
         header_info = Header()
         header_info.stamp = rospy.Time.now()
-        header_info.frame_id = "map"
+        header_info.frame_id = "vicon"
         pose_pack= []
         
         
