@@ -63,7 +63,7 @@ void octomap_binary_callback(const octomap_msgs::OctomapConstPtr& octomap_msg)
 
     
     float bbx_range = 5.;
-    float resolution = 0.5;
+    float resolution = 0.25;
     //int bsize = static_cast<int>((bbx_upper-bbx_lower)/resolution);
     octomap::point3d  min_bbx;
     min_bbx.x() = round_val(quad_pos.x)+0.25;
@@ -105,6 +105,17 @@ void octomap_binary_callback(const octomap_msgs::OctomapConstPtr& octomap_msg)
         point3d.y = round_val(point3d.y);
         point3d.z = round_val(point3d.z);
 
+        //box limits
+
+        float frontLim = point3d.x + resolution;
+        float rearLim = point3d.x - resolution;
+        float leftLim = point3d.y + resolution;
+        float rightLim = point3d.y - resolution;
+        float upperLim = point3d.z + resolution;
+        float lowerLim = point3d.z - resolution;
+
+
+
         if(tree_index==1){
             offset3d.x = quad_pos.x+0.25;
             offset3d.y = quad_pos.y+0.25;
@@ -113,8 +124,11 @@ void octomap_binary_callback(const octomap_msgs::OctomapConstPtr& octomap_msg)
             gridOccupancy.resize(grids3d.size(), 0.);
         }
 
+        //ROS_INFO("grid");
         for(int grid_index =0; grid_index<grids3d.size(); grid_index++){   
-            if(abs(grids3d[grid_index].x-point3d.x)<1e-3 && abs(grids3d[grid_index].y-point3d.y)<1e-3 && abs(grids3d[grid_index].z-point3d.z)<1e-3){
+                        
+            //if(abs(grids3d[grid_index].x-point3d.x)<1e-3 && abs(grids3d[grid_index].y-point3d.y)<1e-3 && abs(grids3d[grid_index].z-point3d.z)<1e-3){
+            if (grids3d[grid_index].x>=rearLim && grids3d[grid_index].x<=frontLim && grids3d[grid_index].y>=rightLim && grids3d[grid_index].y<=leftLim && grids3d[grid_index].z>=lowerLim && grids3d[grid_index].z<=upperLim){
                 if(it->getOccupancy()>0.5){
                     gridOccupancy[grid_index] =1;
                 }
@@ -128,6 +142,7 @@ void octomap_binary_callback(const octomap_msgs::OctomapConstPtr& octomap_msg)
 
     }
     
+
     occupancyChannel.name = "occupancy probability";
     occupancyChannel.values = occupancyProb;
     occupancyChannels.push_back(occupancyChannel);    

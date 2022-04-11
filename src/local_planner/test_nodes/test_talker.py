@@ -38,24 +38,27 @@ class local_planner_test_talker:
                                  [[-1,0,0],[0,0,-1]]])
         plane_coefs_fake = np.array([[2,2],
                                  [12,-7],
-                                 [-15,-3]])
+                                 [-15,-1]])
 
         # 2 point problem
         ic_p = np.array([0,0,3])
-        bc_p = np.array([20,20,5])
+        bc_p = np.array([20,20,3])
         self.positions = np.array([ic_p,bc_p])
 
         # Published values
         self.global_plan = Path()
         self.cvx_decomp = CvxDecomp()
 
+        new_path_header = Header(stamp=rospy.get_rostime(),frame_id = "world")
+
         pose_list = []
         for i in range(self.positions.shape[0]):
-            pose_new = PoseStamped(pose=Pose(position=Point(x = self.positions[i,0],
+            pose_new = PoseStamped(header = new_path_header, pose=Pose(position=Point(x = self.positions[i,0],
                                                     y = self.positions[i,1],
                                                     z = self.positions[i,2])))
             pose_list.append(pose_new)
         self.global_plan.poses = pose_list
+        self.global_plan.header = new_path_header
 
         # plane_list = []
         # for i in range(self.planes.shape[0]):

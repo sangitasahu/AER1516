@@ -7,9 +7,10 @@
 
 from __future__ import division, print_function, absolute_import
 from cmath import pi
+from enum import Enum
 
 # Import libraries
-import sys, copy
+import sys, copy, threading
 import rospy
 import numpy as np
 import mosek as mosek
@@ -25,10 +26,11 @@ from geometry_msgs.msg import Point, PointStamped, Vector3, Quaternion, PoseStam
 from shape_msgs.msg import Plane
 from std_msgs.msg import Float64, Header
 from convex_decomposer.msg import CvxDecomp, Polyhedron
+from master_node.msg import MasterNodeState
 
 class LocalPlanner(object):
     "Local Planner Class"
-    def __init__(self,replan_freq,goal_freq):
+    def __init__(self,replan_freq,goal_freq,fake_dyn_freq):
         
         # Storage
         # Inputs
@@ -36,6 +38,7 @@ class LocalPlanner(object):
         self.glob_plan = Path()
         self.cvx_decomp = CvxDecomp()
         self.global_goal = PointStamped()
+        self.master_node_state = MasterNodeState()
 
         # Flags for inputs being initialized
         self.received_state = False
@@ -63,9 +66,13 @@ class LocalPlanner(object):
         # Run rates
         self.replan_freq = replan_freq
         self.goal_freq = goal_freq
+        self.fake_dynamics_freq = fake_dyn_freq
+
+        # Locks
+        self.trajectory_lock = threading.Lock()
 
         # Vehicle limits
-        self.v_max = 3 # m/s
+        self.v_max = 5 # m/s
         self.a_max = 10 # m/s2
         self.j_max = 50 # m/s3
 
@@ -78,11 +85,11 @@ class LocalPlanner(object):
         self.coll_M = 1000 # Collision constraint upper bound
         self.n_int_max = 5 # Maximum number of JPS intervals
         self.n_plane_max = 8 # Maximum number of polyhedron planes per interval
-        self.log_settings = mosek.streamtype.log # Detail level of output
+        self.log_settings = mosek.streamtype.wrn # Detail level of output
         self.set_var_names = True # Label variable names or not. Performance is allegedly faster without
 
         # Time line search parameters
-        self.f = 2 # Factor on constant motion solution. Start conservatively
+        self.f = 2.25 # Factor on constant motion solution. Start conservatively
         self.alpha = 1.25 # Replanning time factor to plan from on old solution
         self.gamma_up = 1 # Limit on how much time factor can increase/decrease on each timestep
         self.gamma_down = 0.25
@@ -93,12 +100,17 @@ class LocalPlanner(object):
         self.msk_env = mosek.Env()
         self.task = self.msk_env.Task()
 
+        # Solver settings
+        self.task.putintparam(mosek.iparam.mio_heuristic_level,0)
+
         # Misc logging settings
         self.opt_run = False
-        self.msk_env.set_Stream(mosek.streamtype.log, self.streamprinter) # Optimizer output
-        self.task.set_Stream(mosek.streamtype.log, self.streamprinter) # Optimizer output
+        self.msk_env.set_Stream(self.log_settings, self.streamprinter) # Optimizer output
+        self.task.set_Stream(self.log_settings, self.streamprinter) # Optimizer output
         self.task.putintparam(mosek.iparam.infeas_report_auto, mosek.onoffkey.on) # Infeasibility report
         self.task.putintparam(mosek.iparam.max_num_warnings,1) # Warning suppression(zeroing out constraints creates warnings)
+
+        self.task.putintparam(mosek.iparam.opf_write_solutions,mosek.onoffkey.off)
 
         self.goal_log = True
         self.goal_log_int = 100
@@ -158,6 +170,7 @@ class LocalPlanner(object):
         self.cp_a_opt = np.zeros(self.num_accel)
         self.cp_j_opt = np.zeros(self.num_jerk)
         self.bin_opt = np.zeros(self.num_bin)
+        self.soln_no_opt = 0
 
         self.t_traj_opt_start = 0
         self.dT_traj_opt = 10
@@ -170,9 +183,14 @@ class LocalPlanner(object):
         self.cp_a_comm = np.zeros(self.num_accel)
         self.cp_j_comm = np.zeros(self.num_jerk)
         self.bin_comm = np.zeros(self.num_bin)
+        self.soln_no_comm = 0
 
         self.t_traj_comm_start = 0
         self.dT_traj_comm = 10 # Nonzero value, avoid zero division
+
+        # Tolerances on if we replan when we get close to the goal, solver is unstable when you're too close to the goal
+        self.goal_pos_tol = 1E-1
+        self.goal_cp_tol = 1E-4
 
         self.yaw_filt_val = 0
         self.yaw_tol = 1E-2
@@ -183,6 +201,9 @@ class LocalPlanner(object):
         self.plan_start_future = True
         self.plan_future_t_fac = 1.25 # Factor to apply to execution time from last replanning iteration. Make sure we can find a new plan in time
         self.replan_time_prev = 0 # First replan should be immediate
+
+        # Fake dynamics parameters
+        self.fake_IMU = np.zeros(3)
 
         # Start time
         self.t_start_int_debug = rospy.get_rostime()
@@ -236,7 +257,7 @@ class LocalPlanner(object):
                 for j in range(self.n_cp):
                     for k in range(self.n_int_max):
                         for l in range(self.n_plane_max):
-                            ind_coll_this = self.ind_coll + self.n_plane_max*(k+self.n_int_max*(j+self.n_cp*i))
+                            ind_coll_this = self.ind_coll + self.n_plane_max*(k+self.n_int_max*(j+self.n_cp*i)) + l
                             self.task.putconname(ind_coll_this,
                                             'coll_{}_{}_{}_{}'.format(i,j,k,l))
             
@@ -459,7 +480,10 @@ class LocalPlanner(object):
 
     def replan(self):
         # Check inputs initialized
-        if not (self.received_state and self.received_glob_plan and self.received_cvx_decomp and self.received_global_goal):
+        #rospy.loginfo("Conditions: {} {} {} {}".format(self.received_state,self.received_glob_plan,self.received_cvx_decomp,self.master_node_state.state))
+        if not (self.received_state and self.received_glob_plan and 
+                self.received_cvx_decomp and self.received_global_goal and self.master_node_state.state == self.master_node_state.FLIGHT_LOCAL):
+            #rospy.loginfo("Conditions: {} {} {} {}".format(self.received_state,self.received_glob_plan,self.received_cvx_decomp,self.master_node_state.state))
             return
 
         # Get start time
@@ -475,6 +499,16 @@ class LocalPlanner(object):
         state_start = copy.deepcopy(self.state)
         global_plan = copy.deepcopy(self.glob_plan)
         cvx_decomp = copy.deepcopy(self.cvx_decomp)
+
+        # See if we've reached the goal within tolerance. If so don't need to keep planning, solver can be unstable
+        d_goal = np.sqrt((state_start.pos.x - self.global_goal.point.x)**2 +
+                          (state_start.pos.y - self.global_goal.point.y)**2 +
+                          (state_start.pos.z - self.global_goal.point.z)**2)
+        d_goal_cp = np.sqrt((self.cp_p_comm[3*self.n_cp*(self.n_seg-1)+(self.n_cp-1)] - self.global_goal.point.x)**2 +
+                          (self.cp_p_comm[3*self.n_cp*(self.n_seg-1)+(2*self.n_cp-1)] - self.global_goal.point.y)**2 +
+                          (self.cp_p_comm[3*self.n_cp*(self.n_seg-1)+(3*self.n_cp-1)] - self.global_goal.point.z)**2)
+        if d_goal < self.goal_pos_tol and d_goal_cp < self.goal_cp_tol:
+            return
 
         # Problem size
         n_int = len(cvx_decomp.polyhedra)
@@ -499,8 +533,13 @@ class LocalPlanner(object):
             if self.plan_start_future:
                 t_plan_start = t_replan_start_s + self.plan_future_t_fac*self.replan_time_prev
             else:
-                t_plan_start = t_replan_start_s
+                t_plan_start = state_start.header.stamp.to_sec()
 
+            # Skip this replanning step if haven't begun to use last optimal trajectory. Saves a ton of overhead
+            # TODO: This could be improved
+            if not t_replan_start_s > self.t_traj_opt_start:
+                return
+            
             # Position and velocity depends on if we plan from current or future state
             if self.plan_start_future and self.opt_run:
                 # Interpolate either committed or most recent optimal trajectory result, depending on which is appropriate
@@ -527,13 +566,23 @@ class LocalPlanner(object):
                 a_0 = np.zeros(3)
             elif t_plan_start > self.t_traj_opt_start:
                 # Interpolate on most recent optimal trajectory result
-                a_0 = bezier_interpolate(self.cp_a_opt.reshape(self.n_cp-2,3,self.n_seg,order='F').swapaxes(0,1),
+                a_0_future = bezier_interpolate(self.cp_a_opt.reshape(self.n_cp-2,3,self.n_seg,order='F').swapaxes(0,1),
                                         self.dT_traj_opt*np.ones(self.n_seg),t_plan_start-self.t_traj_opt_start,n=1).flatten()
+                # a_0_curr = bezier_interpolate(self.cp_a_opt.reshape(self.n_cp-2,3,self.n_seg,order='F').swapaxes(0,1),
+                #                         self.dT_traj_opt*np.ones(self.n_seg),t_replan_start_s-self.t_traj_opt_start,n=1).flatten()
+                # Add to current fake IMU measurement the extra amount of acceleration we predict in the future when following our trajectory
+                # a_0 = self.fake_IMU + a_0_future - a_0_curr
+                a_0 = a_0_future
             else:
                 # Won't have yet reached most recent optimal trajectory result, stick to committed trajectory
-                a_0 = bezier_interpolate(self.cp_a_comm.reshape(self.n_cp-2,3,self.n_seg,order='F').swapaxes(0,1),
+                a_0_future = bezier_interpolate(self.cp_a_comm.reshape(self.n_cp-2,3,self.n_seg,order='F').swapaxes(0,1),
                                         self.dT_traj_comm*np.ones(self.n_seg),t_plan_start-self.t_traj_comm_start,n=1).flatten()
-            
+                # a_0_curr = bezier_interpolate(self.cp_a_comm.reshape(self.n_cp-2,3,self.n_seg,order='F').swapaxes(0,1),
+                #                         self.dT_traj_comm*np.ones(self.n_seg),t_replan_start_s-self.t_traj_opt_start,n=1).flatten()
+                # Add to current fake IMU measurement the extra amount of acceleration we predict in the future when following our trajectory
+                # a_0 = self.fake_IMU + a_0_future - a_0_curr
+                a_0 = a_0_future
+
         x_f = np.array([global_plan.poses[n_glob_last-1].pose.position.x,
                         global_plan.poses[n_glob_last-1].pose.position.y,
                         global_plan.poses[n_glob_last-1].pose.position.z])
@@ -543,8 +592,10 @@ class LocalPlanner(object):
         # Calculate time allocation. Minimum time for constant input motions between current and goal states, multiply by adaptive scale factor
         dx = x_f-x_0
         dv = v_f-v_0
+        da = a_f-a_0
         t_min = np.max(np.vstack((np.abs(dx)/self.v_max,
-                                np.abs(dv)/self.a_max)))
+                                np.abs(dv)/self.a_max,
+                                np.abs(da)/self.j_max)))
         
         t_alloc = t_min*self.f
 
@@ -692,7 +743,7 @@ class LocalPlanner(object):
             self.bkx[ind_bin_actv[i]] = [mosek.boundkey.ra]
             self.blx[ind_bin_actv[i]] = 0
             self.bux[ind_bin_actv[i]] = 1
-
+        
         # Velocity/Acceleration/Jerk Consistency - Just need to update time values
         # Velocity
         a_val_v_cons = dT*np.ones(self.num_vel)
@@ -722,8 +773,6 @@ class LocalPlanner(object):
         self.task.putqobj(q_cost_subi,q_cost_subi,q_cost_val)
 
         # Call solver
-        # TODO: Try some of the stuff here to speed it up:
-        # https://docs.mosek.com/latest/pythonapi/mip-optimizer.html#speeding-up-the-solution-process
         self.task.optimize()
         self.task.solutionsummary(mosek.streamtype.log)
         self.task.optimizersummary(mosek.streamtype.log)
@@ -735,31 +784,39 @@ class LocalPlanner(object):
         soln_bad = (solsta == mosek.solsta.unknown or solsta == mosek.solsta.prim_infeas_cer
                     or solsta == mosek.solsta.dual_infeas_cer or solsta == mosek.solsta.prim_illposed_cer
                     or solsta == mosek.solsta.dual_illposed_cer)
-        
+
+        t_soln = rospy.get_rostime()
         if soln_bad:
             # Bad exit code. Keep working off of existing solution
-            rospy.loginfo("Bad solver exit status:%s".format(str(solsta)))
+            rospy.loginfo("Bad solver exit status: {}, {}".format(str(prosta), str(solsta)))
+            rospy.loginfo("At t = {:.1f} s".format(t_soln.to_sec()))
+            #self.task.writedata('second_run.opf')
             return
-        
-        if not self.opt_run:
-            self.opt_run = True
+        else:
+            rospy.loginfo("Successful solution: {}, {}".format(str(prosta), str(solsta)))
+            rospy.loginfo("At t = {:.1f} s. Solve time: {:.1f} ms".format(t_soln.to_sec(),
+                                                                            1000*(t_soln.to_sec()-t_replan_start_s)))
+            rospy.loginfo("Fake IMU {}".format(self.fake_IMU))
 
         # Store solution for use in output
         # TODO: May need to consider thread safety
         self.task.getxx(mosek.soltype.itg,self.xx)
+
+        # Acquire lock to update trajectory
+        self.trajectory_lock.acquire()
         self.cp_p_opt = self.xx[0:self.ind_vel]
         self.cp_v_opt = self.xx[self.ind_vel:self.ind_accel]
         self.cp_a_opt = self.xx[self.ind_accel:self.ind_jerk]
         self.cp_j_opt = self.xx[self.ind_jerk:self.ind_bin]
         self.bin_opt = self.xx[self.ind_bin:self.ind_bin + self.num_bin]
-
-        self.t_traj_opt_start = state_start.header.stamp.to_sec()
+        self.dT_traj_opt = dT
+        self.t_traj_opt_start = t_plan_start
+        self.soln_no_opt = self.soln_no_opt + 1
+        self.trajectory_lock.release() # Job's done!
 
         # Fake planning option just runs from starting position
         if self.fake_plan:
             self.t_traj_opt_start = self.t_start_plan
-        
-        self.dT_traj_opt = dT
 
         # Update path for visualization. Interpolate position values along entire length
         # TODO: Can probably clean the ordering on this one up. Reshape/swap axes works but is confusing
@@ -776,6 +833,12 @@ class LocalPlanner(object):
         # Store replan time for adjustments on future iterations
         t_replan_finish = rospy.get_rostime()
         self.replan_time_prev = (t_replan_finish-t_replan_start).to_sec()
+        rospy.loginfo('Replanning Time: {:.1f} ms'.format(self.replan_time_prev*1000))
+
+        # Have completed a replanning iteration, can start publishing goal location
+        if not self.opt_run:
+            # self.task.writedata('first_run.opf')
+            self.opt_run = True
 
     def update_goal(self):
 
@@ -788,22 +851,28 @@ class LocalPlanner(object):
 
         # See if we should update committed trajectory to latest optimal trajectory
         # TODO: Potentially need to address thread safety here, optimizer could be finishing as this runs
-        if t_curr_s>self.t_traj_opt_start:
-            self.cp_p_comm = self.cp_p_opt
-            self.cp_v_comm = self.cp_v_opt
-            self.cp_a_comm = self.cp_a_opt
-            self.bin_comm = self.bin_opt
+        # if t_curr_s>self.t_traj_opt_start:
+        if self.soln_no_opt > self.soln_no_comm and t_curr_s>self.t_traj_opt_start:
+            # Time to update committed trajectory, get lock
+            self.trajectory_lock.acquire()
+            self.cp_p_comm = self.cp_p_opt.copy()
+            self.cp_v_comm = self.cp_v_opt.copy()
+            self.cp_a_comm = self.cp_a_opt.copy()
+            self.cp_j_comm = self.cp_j_opt.copy()
+            self.bin_comm = self.bin_opt.copy()
             self.t_traj_comm_start = self.t_traj_opt_start
             self.dT_traj_comm = self.dT_traj_opt
+            self.soln_no_comm = self.soln_no_opt
+            self.trajectory_lock.release() # All done
 
         goal_p_interp = bezier_interpolate(self.cp_p_comm.reshape(self.n_cp,3,self.n_seg,order='F').swapaxes(0,1),
-                                            self.dT_traj_comm*np.ones(self.n_seg),t_curr_s-self.t_traj_comm_start,n=3)
+                                            self.dT_traj_comm*np.ones(self.n_seg),t_curr_s-self.t_traj_comm_start,n=3).flatten()
         goal_v_interp = bezier_interpolate(self.cp_v_comm.reshape(self.n_cp-1,3,self.n_seg,order='F').swapaxes(0,1),
-                                            self.dT_traj_comm*np.ones(self.n_seg),t_curr_s-self.t_traj_comm_start,n=2)
+                                            self.dT_traj_comm*np.ones(self.n_seg),t_curr_s-self.t_traj_comm_start,n=2).flatten()
         goal_a_interp = bezier_interpolate(self.cp_a_comm.reshape(self.n_cp-2,3,self.n_seg,order='F').swapaxes(0,1),
-                                            self.dT_traj_comm*np.ones(self.n_seg),t_curr_s-self.t_traj_comm_start,n=1)
+                                            self.dT_traj_comm*np.ones(self.n_seg),t_curr_s-self.t_traj_comm_start,n=1).flatten()
         goal_j_interp = bezier_interpolate(self.cp_j_comm.reshape(self.n_cp-3,3,self.n_seg,order='F').swapaxes(0,1),
-                                            self.dT_traj_comm*np.ones(self.n_seg),t_curr_s-self.t_traj_comm_start,n=0)
+                                            self.dT_traj_comm*np.ones(self.n_seg),t_curr_s-self.t_traj_comm_start,n=0).flatten()
 
         # Populate goal message
         goal_new = Goal()
@@ -833,11 +902,25 @@ class LocalPlanner(object):
 
         if self.goal_log:
             if self.goal_log_count%self.goal_log_int == 0:
-                rospy.loginfo("Published goal location %s",goal_new.p)
+                rospy.loginfo("Published goal location [{:.3f},{:.3f},{:.3f}]".format(goal_new.p.x,goal_new.p.y,goal_new.p.z))
             self.goal_log_count += 1
         
         self.goal = goal_new
 
+    def fake_dynamics(self):
+        # Integrate jerk to fake having an IMU onboard
+        if not self.opt_run:
+            return
+
+        # Interpolate jerk at current time and integrate with first order Euler
+        t_curr = rospy.get_rostime()
+        t_curr_s = t_curr.to_sec()
+        
+        jerk_interp = bezier_interpolate(self.cp_j_comm.reshape(self.n_cp-3,3,self.n_seg,order='F').swapaxes(0,1),
+                                        self.dT_traj_comm*np.ones(self.n_seg),t_curr_s-self.t_traj_comm_start,n=0).flatten()
+
+        self.fake_IMU = self.fake_IMU + jerk_interp/self.fake_dynamics_freq
+    
     def streamprinter(self,text):
         # Define a stream printer to grab output from MOSEK
         sys.stdout.write(text)
