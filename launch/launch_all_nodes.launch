@@ -1,26 +1,37 @@
 <launch>
-	<arg name="my_workspace_path" default="/home/sangita/project_ws/AER1516"/>	
 
 	<!-- Launch ACL Gazebo -->
-	<include file="$(arg my_workspace_path)/src/acl-gazebo/acl_sim/launch/start_world.launch" />
-	<include file="$(arg my_workspace_path)/src/acl-gazebo/acl_sim/launch/perfect_tracker_and_sim.launch" />
+	<include file="$(find acl_sim)/launch/start_world.launch" />
+ 	<include file="$(find acl_sim)/launch/perfect_tracker_and_sim.launch" />
 	
-	<!-- Master Node -->
-	<include file="$(arg my_workspace_path)/src/master_node/launch/start_master_node.launch" />
-
 	<!-- Octomap Launch -->
-	<include file="/opt/ros/melodic/share/octomap_server/launch/octomap_mapping.launch" />
+	<node pkg="octomap_server" type="octomap_server_node" name="octomap_server">
+		<param name="resolution" value="0.5" />
 
-	<!-- Mapper Module -->
-	<include file="$(arg my_workspace_path)/src/mapper/launch/octomap_launch.launch" />
+		<!-- fixed map frame (set to 'map' if SLAM or localization running!) -->
+		<param name="frame_id" type="string" value="vicon" />
 
-	<!-- Global Planner Module -->
-	<include file="$(arg my_workspace_path)/src/global_planner/launch/start_global_planner.launch" />
+		<!-- maximum range to integrate (speedup!) -->
+		<param name="sensor_model/max_range" value="10.0" />
+
+		<!-- data source to integrate (PointCloud2) -->
+		<remap from="cloud_in" to="/SQ01s/camera/cloud" />
+
+	</node>
+
+	<!-- Mapper -->
+	<include file="$(find octomap_listener)/launch/octomap_launch.launch" />
+
+	<!-- Master Node -->
+	<include file="$(find master_node)/launch/start_master_node.launch" />
+
+	<!-- Global Planner -->
+	<include file="$(find global_planner)/launch/start_global_planner.launch" />
 
 	<!-- Convex Decomposition -->
-	<include file="$(arg my_workspace_path)/src/convex_decomposer/launch/start_convex_decomposition.launch" />
+	<include file="$(find convex_decomposer)/launch/start_convex_decomposition.launch" />
 
 	<!-- Local Planner -->
-	<include file="$(arg my_workspace_path)/src/local_planner/launch/start_local_planner.launch" />
+	<include file="$(find local_planner)/launch/start_local_planner.launch" />
 
 </launch>

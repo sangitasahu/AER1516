@@ -126,6 +126,7 @@ class MasterNode(object):
             # Publish starting location until start time is met
             start_goal = Goal(header=Header(stamp=rospy.get_rostime(),frame_id = self.frame_id))
             start_goal.p = Vector3(x=self.start_x,y=self.start_y,z=self.start_z)
+            start_goal.yaw = self.start_yaw
             self.goal_pub.publish(start_goal)
 
             self.start_timer += 1/(self.goal_freq)
@@ -157,6 +158,7 @@ class MasterNode(object):
             # Publish updated goal location
             new_goal = Goal(header=Header(stamp=rospy.get_rostime(),frame_id = self.frame_id))
             new_goal.p = Vector3(x=self.start_x,y=self.start_y,z=self.goal_filt_z)
+            new_goal.yaw = self.start_yaw
             if self.node_state == NodeState.TAKEOFF:
                 new_goal.v = Vector3(z=self.takeoff_speed)
             self.goal_pub.publish(new_goal)

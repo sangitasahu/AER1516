@@ -1,0 +1,16 @@
+{
+    "configurations": [
+
+        {
+            "name": "ROS: Attach",
+            "type": "ros",
+            "request": "attach"
+        },
+        {
+            "name": "Full System Debug",
+            "type": "ros",
+            "request": "launch",
+            "target": "/home/matt/AER1516_Project/launch/launch_nodes_debug.launch"
+        }
+    ]
+  }
