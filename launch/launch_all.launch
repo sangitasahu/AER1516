@@ -6,5 +6,14 @@
 	<include file="$(arg my_workspace_path)/src/acl-gazebo/acl_sim/launch/start_world.launch" />
 	<include file="$(arg my_workspace_path)/src/acl-gazebo/acl_sim/launch/perfect_tracker_and_sim.launch" />
 
+	<!-- Master Node -->
+	<include file="$(arg my_workspace_path)/src/master_node/launch/start_master_node.launch" />
+
+	<!-- Octomap Launch -->
+	<include file="/opt/ros/melodic/share/octomap_server/launch/octomap_mapping.launch" />
+
+	<!-- Mapper Module -->
+	<include file="$(arg my_workspace_path)/src/mapper/launch/octomap_launch.launch" />
+
 
 </launch>
