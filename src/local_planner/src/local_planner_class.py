@@ -72,7 +72,7 @@ class LocalPlanner(object):
         self.trajectory_lock = threading.Lock()
 
         # Vehicle limits
-        self.v_max = 5.0 # m/s
+        self.v_max = 3.0 # m/s
         self.a_max = 10.0 # m/s2
         self.j_max = 50.0 # m/s3
 
@@ -516,22 +516,21 @@ class LocalPlanner(object):
                           (self.cp_p_comm[3*self.n_cp*(self.n_seg-1)+(2*self.n_cp-1)] - self.global_goal.point.y)**2 +
                           (self.cp_p_comm[3*self.n_cp*(self.n_seg-1)+(3*self.n_cp-1)] - self.global_goal.point.z)**2)
         if d_goal < self.goal_pos_tol and d_goal_cp < self.goal_cp_tol:
-            # if self.solve_times_reported == False:
-            #     self.solve_times_reported = True
-            #     solve_times_array = np.asarray(self.solve_times)
-            #     rospy.loginfo('Reached Goal. Mean solve time {:.1f} ms, Median {:.1f} ms, Stdev {:.2f} ms'.format(np.mean(solve_times_array),
-            #                     np.median(solve_times_array),np.std(solve_times_array)))
             return
 
         # Problem size
-        n_int = len(cvx_decomp.polyhedra)
-        n_int_glob = len(global_plan.poses)
+        # Clip to maximum number of intervals and planes
+        n_int = min(len(cvx_decomp.polyhedra),self.n_int_max)
+        n_int_glob = min(len(global_plan.poses),self.n_int_max)
         n_glob_last = min(n_int,n_int_glob)
-        if not(n_int==n_int_glob):
+        if n_int == 0 or n_int_glob == 0:
+            rospy.loginfo('Invalid global path or convex decomposition length. Global:{}, CvxDecomp:{}'.format(n_int_glob,n_int))
+            return        
+        elif not(n_int==n_int_glob):
             rospy.loginfo("Number of polyhedra does not match global path length({}~={})".format(n_int,n_int_glob))
-        n_planes = np.zeros(n_int)
+        n_planes = np.zeros(n_int,dtype = np.int32)
         for i in range(n_int):
-            n_planes[i] = len(cvx_decomp.polyhedra[i].planes)
+            n_planes[i] = min(len(cvx_decomp.polyhedra[i].planes),self.n_plane_max)
 
         # Calculate initial condition
         if self.fake_plan:
@@ -663,11 +662,18 @@ class LocalPlanner(object):
         plane_norms = np.zeros((self.n_int_max,self.n_plane_max,3))
         plane_coefs = np.zeros((self.n_int_max,self.n_plane_max))
         plane_present = np.zeros((self.n_int_max,self.n_plane_max))
-        for i in range(len(cvx_decomp.polyhedra)):
-            for j in range(len(cvx_decomp.polyhedra[i].planes)):
+        for i in range(n_int):
+            for j in range(n_planes[i]):
+                # try:
                 plane_norms[i,j,:] = cvx_decomp.polyhedra[i].planes[j].coef[0:3]
                 plane_coefs[i,j] = cvx_decomp.polyhedra[i].planes[j].coef[3]
                 plane_present[i,j] = 1
+                # except:
+                #     print('Index i:{}, j:{}'.format(i,j))
+                #     print('plane norms shape:{}'.format(plane_norms.shape))
+                #     print('plane coefs shape:{}'.format(plane_coefs.shape))
+                #     print('n intervals:{}'.format(n_int))
+                #     print('Plane counts:{}'.format(n_planes))
         coll_rel_row_inds = np.arange(self.n_plane_max*self.n_int_max,dtype=np.int32).reshape(plane_coefs.shape,order='C')
         coll_bin_rel_col_inds = np.tile(np.arange(self.n_int_max,dtype=np.int32),self.n_plane_max).reshape(plane_coefs.shape,order='F')
 
@@ -757,7 +763,7 @@ class LocalPlanner(object):
                     self.f = max(f_min_curr,self.f_min)
                 else:
                     # Did not find a solution last iteration. Bump up time allocation factor
-                    self.f = min(self.f+self.gamma_step,f_max_curr)
+                    self.f = min(self.f+self.gamma_step,f_max_curr,self.f_max)
 
             # Calculate time allocation. Minimum time for constant input motions between current and goal states, multiply by adaptive scale factor
             dx = x_f-x_0
@@ -842,6 +848,7 @@ class LocalPlanner(object):
                     rospy.loginfo("Line search ended in bad solver exit status: {}, {}".format(str(prosta), str(solsta)))
                     rospy.loginfo("At t = {:.1f} s.f: {:.2f}".format(t_opt_finish.to_sec(),self.f))
                     rospy.loginfo('x_0 = {}'.format(x_0))
+                    return
             else:
                 # Bad exit code and not performing line search. Keep flying off of last solution
                 rospy.loginfo("Bad solver exit status: {}, {}".format(str(prosta), str(solsta)))
