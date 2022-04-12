@@ -4,7 +4,6 @@ import numpy as np
 from scipy.spatial.transform import Rotation
 import time
 
-
 def dist_pt_ellipsoid_centre(pt,C,d):
   distance = np.linalg.norm(np.linalg.pinv(C).dot(pt-d))
   return distance
@@ -48,8 +47,8 @@ def nearest_hyperplane(C,d,obs):
   return closest_hp
 
 
-
 def find_ellipsoid(p1,p2,offset_x,obs,inflate_distance):
+    xobs_ = obs
     eps_limit = 1e-10
     p1 = np.asarray(p1).astype(np.float)
     p2 = np.asarray(p2).astype(np.float)
@@ -69,6 +68,7 @@ def find_ellipsoid(p1,p2,offset_x,obs,inflate_distance):
     Rf = R
     obs_inflated = []
     obs_preserve = obs
+    
     for pt in obs:
         p = R.transpose().dot(pt-d)
         obs_check = R.dot(np.array([p[0]-np.sign(p[0]) * inflate_distance,p[1]-np.sign(p[1]) * inflate_distance,p[2]-np.sign(p[2]) * inflate_distance]))+d
@@ -76,7 +76,6 @@ def find_ellipsoid(p1,p2,offset_x,obs,inflate_distance):
             obs_inflated.append(obs_check)
     obs = np.asarray(obs_inflated)
     obs_inside = obs
-    
     while (obs_inside!=[]):
         pw = closest_pt_ep(obs_inside,C,d)
         p=R.transpose().dot(pw-d)
@@ -119,4 +118,5 @@ def find_ellipsoid(p1,p2,offset_x,obs,inflate_distance):
             if (1-dist_pt_ellipsoid_centre(pt,C,d)>eps_limit):
                 obs_retain.append(pt)
         obs_inside = obs_retain
-    return C,d
+    xobs_ = []
+    return C,d,xobs_

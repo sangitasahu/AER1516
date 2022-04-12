@@ -15,11 +15,11 @@ This ROS node publishes to the following topics:
 
 """
 # Import ROS libraries
-import sys
+import sys, threading
 import roslib
 import rospy
 # Import classes
-from geometry_msgs.msg import Point
+from geometry_msgs.msg import Point,PoseStamped, Point32
 from std_msgs.msg import Header
 from nav_msgs.msg import Path
 from sensor_msgs.msg import PointCloud
@@ -42,12 +42,15 @@ class cvx_decomp(object):
     """
     def __init__(self):
         # Declare Publishers and Subscibers
-        self.point_cloud = '/probability_publisher'
+        self.point_cloud = '/grid_publisher'
         self.path = '/global_plan'
         self.point_cloud_sub = rospy.Subscriber(self.point_cloud,PointCloud,self.point_cloud_proc)
         self.path_sub = rospy.Subscriber(self.path,Path,self.path_processor)
         self.pub_CvxDecomp = rospy.Publisher('/CvxDecomp',CvxDecomp,queue_size=32)
-        
+        self.obs_interest = '/xnew_obs'
+        self.pub_obs_of_interest = rospy.Publisher(self.obs_interest,PointCloud,queue_size=32)
+
+        self.threading_lock = threading.Lock()
         #Publishers to display polygon and ellipsoids
         self.pub_Ph_display = rospy.Publisher('/polyhedra_disp',pharray_display,queue_size=32) 
         self.pub_E_display = rospy.Publisher('/ellipsoid_disp',Earray_display,queue_size=32) 
@@ -62,7 +65,6 @@ class cvx_decomp(object):
 
         #self.obs_cloud = PointCloud() #Define type!
         self.obs_cloud = [] #Change to pc if necessary
-        #self.obs_cloud = pcp.get_obs([[1,1,0],[2,2,0],[-2,1,0],[5,5,0],[0,14,0]],[])
         self.p = [] # placeholder for holding the end points of the segment in question
         #self.p = [[0,0,1],[0,13,1]]#,[4,4,1]] #Only to test
         self.path_list = [] #Placeholder for the path poses
@@ -70,7 +72,7 @@ class cvx_decomp(object):
         self.n_int_max = 6 #Does not do anything for now : plan to use it to limit the number of hyperplanes of the polyhedron
         self.offset_x = 0.1 #Offset of the ellipsoid around the segment
         self.drone_radius = 0.1 # Radius of the drone for obstacle inflation 
-        self.bbox = [2,2,1]  # Local bounding box of the convex decomposer
+        self.bbox = [2,2,.75]  # Local bounding box of the convex decomposer
         #############################################
         # Set the decomposer frequency
         self.loop_frequency = 10
@@ -86,16 +88,31 @@ class cvx_decomp(object):
         cloud_list = [[point.x,point.y,point.z] for point in cloud]
         cloud_channel = msg.channels[0].values
         self.obs_cloud = pcp.get_obs(cloud_list,cloud_channel)
-        #self.obs_cloud = hp.obs_temp()
-        #print(self.obs_cloud)
-        #self.obs_cloud = pcp.get_obs([[1,1,0],[2,2,0],[-2,1,0],[5,5,0],[0,14,0]],[])
 
     def path_processor(self,msg):
         self.path_list = msg.poses
+        self.threading_lock.acquire()
         self.p = [[point.pose.position.x, point.pose.position.y, point.pose.position.z] for point in self.path_list]
         if len(self.p)==1:
             print("Segment cannot be formed since only one point was obtained")
+        self.threading_lock.release()
         #self.p = [[0,0,1],[0,13,1]]#,[4,4,1]] #Only to test
+    
+    def interest_cloud_callback(self,obs):
+        msg = PointCloud()
+        pts_pack = []
+        ch = []
+        for p in obs:
+            pt = Point32(x=p[0],y=p[1],z=p[2])
+            pts_pack.append(pt)
+            ch.append(1)
+        msg.points = pts_pack
+        
+        header_info = Header()
+        header_info.stamp = rospy.Time.now()
+        header_info.frame_id = "vicon"
+        msg.header = header_info
+        self.pub_obs_of_interest.publish(msg)
     
     """Function called when timer matures"""
     def decompose_points(self,event):
@@ -110,6 +127,7 @@ class cvx_decomp(object):
         poly_pack = []
         elliparray_disp_pack = []
         polyarray_disp_pack = []
+        self.threading_lock.acquire()
         for i in range(0,len(self.p)-1):
             #Start point for the segment
             p1 = self.p[i]
@@ -118,8 +136,12 @@ class cvx_decomp(object):
             #Find a bounding polyhedron based on self.bbox param.
             bbox_polyhedron = hp.add_local_bbox(p1,p2,self.bbox)
             obs = hp.set_obs_Vs(self.obs_cloud,bbox_polyhedron)            
+
             #Find an ellipsoid around the segment
-            C,d = E.find_ellipsoid(p1,p2,self.offset_x,obs,self.drone_radius)
+            C,d,xobs_ = E.find_ellipsoid(p1,p2,self.offset_x,obs,self.drone_radius)
+            
+            self.interest_cloud_callback(xobs_)
+
             #Get the hyperplanes at the extremeties and eliminate the spaces
             cvx_planes = hp.get_hyperplanes(obs,C,d)
             #Add the bounding box and cvx_decomp_planes to obtain inner polyhedrons
@@ -140,8 +162,6 @@ class cvx_decomp(object):
             ellip_disp_msg.E = C.ravel().tolist()
             ellip_disp_msg.d = d.tolist()
             elliparray_disp_pack.append(ellip_disp_msg)
-
-
             normals_pack = []
             points_pack = []
             for j,pln in enumerate(required_polyhedron):
@@ -168,6 +188,7 @@ class cvx_decomp(object):
             #Make a pack for the array
             poly_pack.append(polyhedron_)        
             polyarray_disp_pack.append(poly_disp_msg)
+        self.threading_lock.release()
         self.cvx_polyhedra.polyhedra = poly_pack
         self.cvx_polyhedra.header = header_info
         self.pub_CvxDecomp.publish(self.cvx_polyhedra)
