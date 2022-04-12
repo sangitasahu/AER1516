@@ -91,12 +91,15 @@ class LocalPlanner(object):
         # Time line search parameters
         self.f = 2.25 # Factor on constant motion solution. Start conservatively
         self.f_min = 1.25
-        self.gamma_up = 0.5 # Limit on how much time factor can increase/decrease on each timestep
+        self.f_max = 5
+        self.gamma_up = 0.75 # Limit on how much time factor can increase/decrease on each timestep
         self.gamma_down = 0.25
         self.gamma_step = 0.25
         self.perform_line_search = True
         self.max_line_search_it = 5
         self.last_soln_good = False
+        self.inst_capability_usage = 0
+        self.inst_capability_usage_margin = 0.05 # Margin to keep on v/a/j usage when decreasing time scale factor to prevent infeasibility
         self.t_replan_margin = 0.05 # Margin on allowable replanning time to use when performing line search
 
         # Start MOSEK and initialize variables
@@ -749,8 +752,8 @@ class LocalPlanner(object):
             if self.perform_line_search and self.opt_run:
                 # Dynamically adjust time allocation factor to find faster time trajectories
                 # Time allocation factor is constant otherwise
-                if self.last_soln_good:
-                    # Last timestep successfully found a solution. Try to decrease the time allocation factor
+                if self.last_soln_good and (self.inst_capability_usage < (1-self.inst_capability_usage_margin)):
+                    # Last timestep successfully found a solution and had capability margin. Try to decrease the time allocation factor
                     self.f = max(f_min_curr,self.f_min)
                 else:
                     # Did not find a solution last iteration. Bump up time allocation factor
@@ -825,8 +828,9 @@ class LocalPlanner(object):
                 break
             elif self.perform_line_search:
                 # Try again if expected solution time will not exceed replan loop allowance and have not exceeded max iteration count
+                # or maximum allowable time factor for this replanning iteration
                 have_time = ((((t_opt_finish-t_replan_start+t_soln).to_sec())*(1+self.t_replan_margin) < (1.0/self.replan_freq))
-                                and i<(self.max_line_search_it-1))
+                                and i<(self.max_line_search_it-1) and self.f<f_max_curr)
                 if have_time:
                     # Bad exit code. If we have time to do another solution increase time factor and try again
                     rospy.loginfo("Bad solver exit status: {}, {}. Trying again".format(str(prosta), str(solsta)))
@@ -838,12 +842,10 @@ class LocalPlanner(object):
                     rospy.loginfo("Line search ended in bad solver exit status: {}, {}".format(str(prosta), str(solsta)))
                     rospy.loginfo("At t = {:.1f} s.f: {:.2f}".format(t_opt_finish.to_sec(),self.f))
                     rospy.loginfo('x_0 = {}'.format(x_0))
-                    return
             else:
                 # Bad exit code and not performing line search. Keep flying off of last solution
                 rospy.loginfo("Bad solver exit status: {}, {}".format(str(prosta), str(solsta)))
                 rospy.loginfo("At t = {:.1f} s".format(t_opt_finish.to_sec()))
-                #self.task.writedata('second_run.opf')
                 return
 
         # Store solution for use in output
@@ -859,6 +861,14 @@ class LocalPlanner(object):
         self.t_traj_opt_start = t_plan_start
         self.soln_no_opt = self.soln_no_opt + 1
         self.trajectory_lock.release() # Job's done!
+
+        # Calculate a capability margin so that we back off when our current speed gets too close to constraints to
+        # prevent infeasbility
+        # TODO: This is a hack to get something working. The proper way is to make the constraints at the first interval
+        # soft constraints and back off the time factor if the slack variables become active. Future work item possibly
+        self.inst_capability_usage = np.max(np.hstack((np.abs(self.cp_v_opt[0:3*(self.n_cp-1)])/self.v_max,
+                                                        np.abs(self.cp_a_opt[0:3*(self.n_cp-2)])/self.a_max,
+                                                        np.abs(self.cp_j_opt[0:3*(self.n_cp-3)])/self.j_max)))
 
         # Fake planning option just runs from starting position
         if self.fake_plan:
