@@ -153,41 +153,22 @@ class cvx_decomp(object):
             vertices = plane_utils.calculate_vertices(complex_polyhedron)
             ###Pending work<<< 
             #FIND A FOOL PROOF WAY TO LIMIT TOTAL NUMBER OF PLANES IN A POLYHEDRA?
-            #convert polyhedrons from point normal to standard form >> ax+by+cz=d
-            plane_pack = []
-            polyhedron_ = Polyhedron()
-            ellip_disp_msg = E_display()
-            poly_disp_msg = ph_display()
+
             #Append the ellipsoid for display
-            ellip_disp_msg.E = C.ravel().tolist()
-            ellip_disp_msg.d = d.tolist()
-            elliparray_disp_pack.append(ellip_disp_msg)
+            elliparray_disp_pack.append(E_display(E = C.ravel().tolist(),d = d.tolist()))
             normals_pack = []
             points_pack = []
+            plane_pack = []
             for j,pln in enumerate(required_polyhedron):
-                plane = hp.get_standard_form(pln)
-                plane_msg = Plane()
-                plane_msg.coef = plane
-                plane_pack.append(plane_msg)
-                #form point msg and normal msgs
-                point_msg = Point()
-                normal_msg = Point()
-                point_msg.x = pln[0][0]
-                point_msg.y = pln[0][1]
-                point_msg.z = pln[0][2]
-                normal_msg.x = pln[1][0]
-                normal_msg.y = pln[1][1]
-                normal_msg.z = pln[1][2]
-                #create the message list
-                normals_pack.append(normal_msg)
-                points_pack.append(point_msg)
-
-            poly_disp_msg.points = points_pack
-            poly_disp_msg.normals = normals_pack
-            polyhedron_.planes= plane_pack
+                plane_pack.append(Plane(coef = hp.get_standard_form(pln))) #convert polyhedrons from point normal to standard form >> ax+by+cz=d and append
+                #form point msg and normal msgs and create the message list
+                normals_pack.append(Point(x=pln[1][0],y=pln[1][1],z=pln[1][2]))
+                points_pack.append(Point(x=pln[0][0],y=pln[0][1],z=pln[0][2]))
+            poly_disp_msg = ph_display(points = points_pack,normals = normals_pack)
             #Make a pack for the array
-            poly_pack.append(polyhedron_)        
+            poly_pack.append(Polyhedron(planes = plane_pack))        
             polyarray_disp_pack.append(poly_disp_msg)
+            
         self.threading_lock.release()
         self.cvx_polyhedra.polyhedra = poly_pack
         self.cvx_polyhedra.header = header_info
