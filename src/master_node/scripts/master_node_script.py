@@ -99,7 +99,9 @@ class MasterNode(object):
         # Filter coefficients
         self.goal_filt_cutoff = 20 # Hz
         self.goal_filt_coef = (2*pi*self.goal_filt_cutoff/self.goal_freq)/(1+2*pi*self.goal_filt_cutoff/self.goal_freq)
-        self.yaw_tol = 1E-4
+        self.goal_filt_cutoff_global = 2 # Hz
+        self.goal_filt_coef_global = (2*pi*self.goal_filt_cutoff_global/self.goal_freq)/(1+2*pi*self.goal_filt_cutoff_global/self.goal_freq)
+        self.yaw_tol = 1E-12
 
     def state_sub_callback(self,msg):
         # TODO: May need to consider thread safety
@@ -202,20 +204,42 @@ class MasterNode(object):
                     else:
                         posn_reached = curr_pos+c_mag*travel_dir/np.linalg.norm(travel_dir)
                 else:
+                    # Find line that we're closest to
+                    a_best = 1E6
+                    ind_best = 0
+                    for i in range(len(self.glob_plan.poses)-1):
+                        # Project current position onto line
+                        x_1 = np.array([self.glob_plan.poses[i].pose.position.x,
+                                        self.glob_plan.poses[i].pose.position.y,
+                                        self.glob_plan.poses[i].pose.position.z])
+                        x_2 = np.array([self.glob_plan.poses[i+1].pose.position.x,
+                                        self.glob_plan.poses[i+1].pose.position.y,
+                                        self.glob_plan.poses[i+1].pose.position.z])
+                        l = x_2-x_1
+                        l_hat = l/max(1E-5,np.linalg.norm(l))
+                        v = curr_pos-x_1
+                        v_proj = v.dot(l_hat)*l_hat
+                        a_mag = np.linalg.norm(v_proj - v) # Vector from current position to line
+
+                        if a_mag<a_best or (a_mag<1E-10):
+                            # Grab highest index that we're closest to
+                            a_best = a_mag
+                            ind_best = i
+
+                    # Track along line we're closest to
                     # Project current position onto line
-                    x_1 = np.array([self.glob_plan.poses[0].pose.position.x,
-                                    self.glob_plan.poses[0].pose.position.y,
-                                    self.glob_plan.poses[0].pose.position.z])
-                    x_2 = np.array([self.glob_plan.poses[1].pose.position.x,
-                                    self.glob_plan.poses[1].pose.position.y,
-                                    self.glob_plan.poses[1].pose.position.z])
+                    x_1 = np.array([self.glob_plan.poses[ind_best].pose.position.x,
+                                        self.glob_plan.poses[ind_best].pose.position.y,
+                                        self.glob_plan.poses[ind_best].pose.position.z])
+                    x_2 = np.array([self.glob_plan.poses[ind_best+1].pose.position.x,
+                                    self.glob_plan.poses[ind_best+1].pose.position.y,
+                                    self.glob_plan.poses[ind_best+1].pose.position.z])
                     l = x_2-x_1
                     l_hat = l/max(1E-5,np.linalg.norm(l))
                     v = curr_pos-x_1
                     v_proj = v.dot(l_hat)*l_hat
-
-                    # Try to track desired distance to a point along the first path segment
                     a = v_proj - v # Vector from current position to line
+
                     if np.linalg.norm(a) > c_mag:
                         # If we're too far away, drive laterally to the line. 
                         posn_reached = curr_pos+c_mag*a/np.linalg.norm(a)
@@ -227,13 +251,13 @@ class MasterNode(object):
                 
                 # Align yaw with heading direction, clamp when speed reaches zero
                 head_dir = posn_reached-curr_pos
-                if head_dir[0] < self.yaw_tol and head_dir[1] < self.yaw_tol:
+                if abs(head_dir[0]) < self.yaw_tol and abs(head_dir[1]) < self.yaw_tol:
                     yaw_targ = self.goal_filt_yaw
                 else:
                     yaw_targ = np.arctan2(head_dir[1],head_dir[0])
                     
                 # Apply first order lag filter to smooth transitions
-                self.goal_filt_yaw = self.goal_filt_coef*yaw_targ + (1-self.goal_filt_coef)*self.goal_filt_yaw
+                self.goal_filt_yaw = self.goal_filt_coef_global*yaw_targ + (1-self.goal_filt_coef_global)*self.goal_filt_yaw
                 
                 goal_new = Goal(header = Header(stamp=rospy.get_rostime(),frame_id = self.frame_id))
                 goal_new.p.x = posn_reached[0]
