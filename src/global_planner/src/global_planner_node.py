@@ -233,14 +233,13 @@ class globalPlanner:
         #Initialise
         self.path_nodes_list = [self.cur_state]
         self.goal_reached = False
+        #Get the projected goals in unknown space and known free space
+        self.get_projected_goal()
         #Goal is behind the drone
         if self.goal_is_behind(self.cur_state_in_grid,self.cur_goal):
-          self.path_nodes_list.append(self.cur_goal)
+          self.path_nodes_list.append(self.unk_cur_goal)
           print("Goal is behind the drone!")
-        else:
-          #Get the projected goals in unknown space and known free space
-          self.get_projected_goal()
-          #Calculate JPS path
+        else: #Calculate JPS path          
           next_states, path_cost, sts = self.get_jps_successors()          
           val_sts, last_index = self.is_path_valid(next_states)
           if self.debug_en == False:
@@ -254,7 +253,7 @@ class globalPlanner:
         #Publish the global plan
         self.publish_global_plan()
         #If end goal is reached
-        if self.has_reached_goal(next_states[-1],self.cur_goal):
+        if self.has_reached_goal(self.path_nodes_list[-1],self.cur_goal):
             self.goal_reached = True
             print("Reached end goal!")
             self.jps_run_sts = self.COMPLETED
@@ -271,7 +270,7 @@ class globalPlanner:
       min_d_goal_unk = self.INFINITY
       if self.goal_within_bbx(self.cur_goal, self.cur_state_in_grid) :
         self.proj_cur_goal = self.cur_goal
-        self.unk_cur_goal = None
+        self.unk_cur_goal = self.cur_goal
         print("Goal within the bounding box!")
       else:
         for i in range(0, self.num_of_cells):
@@ -601,11 +600,14 @@ class globalPlanner:
     """###Check Occupancy status"""
     def is_occupied(self,node):
       num = self.get_node_offset(node)
-      if self.occupancy_sts.values[num] == self.OCCUPIED:
-        return self.OCCUPIED
+      if num < self.NUM_OF_CELLS:
+        if self.occupancy_sts.values[num] == self.OCCUPIED:
+          return self.OCCUPIED
+        else:
+          return self.NOT_OCCUPIED 
       else:
-        return self.NOT_OCCUPIED 
-
+        print("Node ", num , " is out of the bounding box with", self.NUM_OF_CELLS, " cells.")
+        return self.OCCUPIED
     """###Check whether a node is reachable or not"""
     def is_reachable(self,node):
       reachable_sts = False
