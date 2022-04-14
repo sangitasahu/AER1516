@@ -30,7 +30,7 @@ class pub_path_class(object):
     """Constructor to initialize the ROSControllerNode class"""
     def __init__(self):
         #self.pth = [[13.5,11.5,1],[15,12.5,1],[16,13,1]]
-        self.pth = [[0,0,1],[1,1,1]]#[15,12.5,1],[16,13,1]]
+        self.pth = [[10.952617645263672, 11.262423515319824, 1], [9.013447761535645, 13.011049270629883, 1]] #[[0,0,1],[1,1,1]]#[15,12.5,1],[16,13,1]]
 
         # Declare Publisher and Subsciber
         
@@ -76,6 +76,7 @@ class pub_path_class(object):
             else:
                 self.pth.append(point)
         posestd = Path()
+        print(self.pth)
         for pt in self.pth:
             posestamped = PoseStamped()
             posestamped.pose.position.x=pt[0]

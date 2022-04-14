@@ -9,32 +9,27 @@ def get_standard_form(plane):
     standard_form = np.append(normal,d).tolist()
     return standard_form
 
-def signed_dist_pt_plane(pt,V):
-    n = V[1]
-    p = V[0]
-    distance = n.dot(pt-p)
-    return distance
+#def signed_dist_pt_plane(pt,V):
+#    n = V[1]
+#    p = V[0]
+#    distance = n.dot(pt-p)
+#    return distance
 
 def pt_is_inside_poly(pt,Vs):
-    check = True
-    for V in Vs:
-        if signed_dist_pt_plane(pt,V)>=0:
-            check=False
-    return check
-
-def obs_inside_poly(pt,Vs):
-    check = True
-    for V in Vs:
-        if signed_dist_pt_plane(pt,V)>=0:
-            check=False
-    return check
+    #check = True
+    plane_pts = np.array(Vs)[:,0,:]
+    plane_normals = np.array(Vs)[:,1,:]
+    dists = np.sum(plane_normals*(pt-plane_pts),axis=1) #all we are doing is n * (pt-p) in array form <<-- signed distance from point to plane
+    dist_inside = dists[np.argwhere(dists>=0)].T[0]
+    #for V in Vs: # Backup slower computation method- but works
+        #if signed_dist_pt_plane(pt,V)>=0:
+    #       check=False
+    return not list(dist_inside)
 
 def set_obs_Vs(obs,Vs):
     new_ob_set = []
-    #print(Vs)
     for pt in obs:
-            if obs_inside_poly(pt,Vs):
-                #print("Here")
+            if pt_is_inside_poly(pt,Vs):
                 new_ob_set.append(pt)
     new_ob_set = np.array(new_ob_set)
     return new_ob_set  
@@ -48,6 +43,7 @@ def get_hyperplanes(obs_init,C,d):
         if not np.all(hypplane[1]==0):
             globalpoly.append(hypplane)
         obs_retain = []
+
         for pt in obs_remain:
             if pt_is_inside_poly(pt,globalpoly):
                 
