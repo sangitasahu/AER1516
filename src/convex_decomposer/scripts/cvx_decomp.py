@@ -1,8 +1,6 @@
 #!/usr/bin/env python2
-
 """
 ROS Node for convex decomposition of the space around a segment defined by p1 and p2. 
-
 This ROS node subscribes to the following topics:
 /probability_publisher
 /global_plan
@@ -12,7 +10,6 @@ This ROS node publishes to the following topics:
 /ellipsoid_disp'
 /polyhedra_disp
 *disp is used to display to RVIZ visualizations
-
 """
 # Import ROS libraries
 import sys, threading
@@ -25,15 +22,15 @@ from nav_msgs.msg import Path
 from sensor_msgs.msg import PointCloud
 from convex_decomposer.msg import Polyhedron , CvxDecomp
 from shape_msgs.msg import Plane
-import hyperplane as hp
-import ellipsoid as E
-import point_cloud_processor as pcp
-import plane_utils
 from decomp_ros_msgs.msg import Polyhedron as ph_display
 from decomp_ros_msgs.msg import PolyhedronArray as pharray_display
 from decomp_ros_msgs.msg import Ellipsoid as E_display
 from decomp_ros_msgs.msg import EllipsoidArray as Earray_display
-
+import hyperplane as hp
+import ellipsoid as E
+import point_cloud_processor as pcp
+import plane_utils
+import numpy as np
 #Define the convex decomposition class
 class cvx_decomp(object):
     """
@@ -57,7 +54,6 @@ class cvx_decomp(object):
 
         # Select trajectory type
         # Initialize messages
-        self.polyhedron = Polyhedron()
         self.cvx_polyhedra = CvxDecomp()
 
         self.ph_display_msg = pharray_display()
@@ -96,22 +92,12 @@ class cvx_decomp(object):
         if len(self.p)==1:
             print("Segment cannot be formed since only one point was obtained")
         self.threading_lock.release()
-        #self.p = [[0,0,1],[0,13,1]]#,[4,4,1]] #Only to test
     
     def interest_cloud_callback(self,obs):
         msg = PointCloud()
-        pts_pack = []
-        ch = []
         for p in obs:
-            pt = Point32(x=p[0],y=p[1],z=p[2])
-            pts_pack.append(pt)
-            ch.append(1)
-        msg.points = pts_pack
-        
-        header_info = Header()
-        header_info.stamp = rospy.Time.now()
-        header_info.frame_id = "vicon"
-        msg.header = header_info
+            msg.points.append(Point32(x=p[0],y=p[1],z=p[2]))
+        msg.header = Header(stamp = rospy.Time.now(),frame_id = "vicon")
         self.pub_obs_of_interest.publish(msg)
     
     """Function called when timer matures"""
@@ -120,14 +106,15 @@ class cvx_decomp(object):
         current_time = rospy.get_time()
         dt = current_time - self.old_time
         #Set header_info for the publish message:
-        header_info = Header()
-        header_info.stamp = rospy.Time.now()
-        header_info.frame_id = "vicon"
+        header_info = Header(stamp = rospy.Time.now(),frame_id = "vicon")
         #Start by finding one polyhedron per segment
-        poly_pack = []
-        elliparray_disp_pack = []
-        polyarray_disp_pack = []
         self.threading_lock.acquire()
+
+        #reinitialize the messages
+        self.cvx_polyhedra = CvxDecomp()
+        self.ph_display_msg = pharray_display()
+        self.E_display_msg = Earray_display()
+
         for i in range(0,len(self.p)-1):
             #Start point for the segment
             p1 = self.p[i]
@@ -148,38 +135,37 @@ class cvx_decomp(object):
             complex_polyhedron = cvx_planes+bbox_polyhedron
             #Simplify the plyhedrons to get inner polyhedrons only 
             # Plan is to simply eliminate planes that are parallel by distance to path segment in question.
-            required_polyhedron = plane_utils.eliminate_redundant_planes(complex_polyhedron)
+            required_polyhedron = np.array(plane_utils.eliminate_redundant_planes(complex_polyhedron))
             #print(required_polyhedron)
             vertices = plane_utils.calculate_vertices(complex_polyhedron)
             ###Pending work<<< 
             #FIND A FOOL PROOF WAY TO LIMIT TOTAL NUMBER OF PLANES IN A POLYHEDRA?
-
             #Append the ellipsoid for display
-            elliparray_disp_pack.append(E_display(E = C.ravel().tolist(),d = d.tolist()))
+            self.E_display_msg.ellipsoids.append(E_display(E = C.ravel().tolist(),d = d.tolist()))
+
             normals_pack = []
             points_pack = []
             plane_pack = []
-            for j,pln in enumerate(required_polyhedron):
+            for pln in required_polyhedron:
                 plane_pack.append(Plane(coef = hp.get_standard_form(pln))) #convert polyhedrons from point normal to standard form >> ax+by+cz=d and append
                 #form point msg and normal msgs and create the message list
                 normals_pack.append(Point(x=pln[1][0],y=pln[1][1],z=pln[1][2]))
                 points_pack.append(Point(x=pln[0][0],y=pln[0][1],z=pln[0][2]))
-            poly_disp_msg = ph_display(points = points_pack,normals = normals_pack)
             #Make a pack for the array
-            poly_pack.append(Polyhedron(planes = plane_pack))        
-            polyarray_disp_pack.append(poly_disp_msg)
-            
+            self.cvx_polyhedra.polyhedra.append(Polyhedron(planes = plane_pack))        
+            self.ph_display_msg.polyhedrons.append(ph_display(points = points_pack,normals = normals_pack))
+        
         self.threading_lock.release()
-        self.cvx_polyhedra.polyhedra = poly_pack
-        self.cvx_polyhedra.header = header_info
-        self.pub_CvxDecomp.publish(self.cvx_polyhedra)
+
         #publish to display on rviz
-        self.ph_display_msg.polyhedrons = polyarray_disp_pack
-        self.E_display_msg.ellipsoids = elliparray_disp_pack
+        self.cvx_polyhedra.header = header_info
         self.E_display_msg.header = header_info
         self.ph_display_msg.header = header_info
+
+        self.pub_CvxDecomp.publish(self.cvx_polyhedra)
         self.pub_E_display.publish(self.E_display_msg)
         self.pub_Ph_display.publish(self.ph_display_msg)
+
         #plotter(p1,p2,obs_init,elp_sample (C,d,100))###PLOTTER
         #plotter_poly(globalpoly)
 if __name__ == '__main__':
