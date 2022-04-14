@@ -45,6 +45,23 @@ class local_planner_test_talker:
         bc_p = np.array([20,20,3])
         self.positions = np.array([ic_p,bc_p])
 
+        # Multi point problem
+        self.positions = np.array([[0,0,3],
+                                   [5,0,4],
+                                   [5,2,8],
+                                   [2,10,4],
+                                   [6,10,4],
+                                   [8,8,4],
+                                   [10,10,4]])
+
+        # self.positions = np.array([[0,0,3],
+        #                            [-5,-5,4],
+        #                            [-5,10,-2],
+        #                            [2,10,4],
+        #                            [0,4,4],
+        #                            [16,12,4],
+        #                            [8,15,4]])
+
         # Published values
         self.global_plan = Path()
         self.cvx_decomp = CvxDecomp()

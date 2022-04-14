@@ -581,20 +581,12 @@ class LocalPlanner(object):
                 # Interpolate on most recent optimal trajectory result
                 a_0_future = bezier_interpolate(self.cp_a_opt.reshape(self.n_cp-2,3,self.n_seg,order='F').swapaxes(0,1),
                                         self.dT_traj_opt*np.ones(self.n_seg),t_plan_start-self.t_traj_opt_start,n=1).flatten()
-                # a_0_curr = bezier_interpolate(self.cp_a_opt.reshape(self.n_cp-2,3,self.n_seg,order='F').swapaxes(0,1),
-                #                         self.dT_traj_opt*np.ones(self.n_seg),t_replan_start_s-self.t_traj_opt_start,n=1).flatten()
-                # Add to current fake IMU measurement the extra amount of acceleration we predict in the future when following our trajectory
-                # a_0 = self.fake_IMU + a_0_future - a_0_curr
                 a_0 = a_0_future
             else:
                 # Won't have yet reached most recent optimal trajectory result, stick to committed trajectory
                 # TODO: Think can delete this case
                 a_0_future = bezier_interpolate(self.cp_a_comm.reshape(self.n_cp-2,3,self.n_seg,order='F').swapaxes(0,1),
                                         self.dT_traj_comm*np.ones(self.n_seg),t_plan_start-self.t_traj_comm_start,n=1).flatten()
-                # a_0_curr = bezier_interpolate(self.cp_a_comm.reshape(self.n_cp-2,3,self.n_seg,order='F').swapaxes(0,1),
-                #                         self.dT_traj_comm*np.ones(self.n_seg),t_replan_start_s-self.t_traj_opt_start,n=1).flatten()
-                # Add to current fake IMU measurement the extra amount of acceleration we predict in the future when following our trajectory
-                # a_0 = self.fake_IMU + a_0_future - a_0_curr
                 a_0 = a_0_future
 
         x_f = np.array([global_plan.poses[n_glob_last-1].pose.position.x,
@@ -664,16 +656,9 @@ class LocalPlanner(object):
         plane_present = np.zeros((self.n_int_max,self.n_plane_max))
         for i in range(n_int):
             for j in range(n_planes[i]):
-                # try:
                 plane_norms[i,j,:] = cvx_decomp.polyhedra[i].planes[j].coef[0:3]
                 plane_coefs[i,j] = cvx_decomp.polyhedra[i].planes[j].coef[3]
                 plane_present[i,j] = 1
-                # except:
-                #     print('Index i:{}, j:{}'.format(i,j))
-                #     print('plane norms shape:{}'.format(plane_norms.shape))
-                #     print('plane coefs shape:{}'.format(plane_coefs.shape))
-                #     print('n intervals:{}'.format(n_int))
-                #     print('Plane counts:{}'.format(n_planes))
         coll_rel_row_inds = np.arange(self.n_plane_max*self.n_int_max,dtype=np.int32).reshape(plane_coefs.shape,order='C')
         coll_bin_rel_col_inds = np.tile(np.arange(self.n_int_max,dtype=np.int32),self.n_plane_max).reshape(plane_coefs.shape,order='F')
 
