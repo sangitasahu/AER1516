@@ -1,3 +1,5 @@
+
+  
 #!/usr/bin/env python
 
 #
@@ -28,12 +30,12 @@ class MasterNode(object):
         # Parameters
         # Flight Parameters
         self.start_delay = 3 # s
-        self.start_x = 0
+        self.start_x = 0    
         self.start_y = 0
-        self.start_z = 
+        self.start_z = 0
         self.start_yaw = 0
         self.flight_z = 3 # m. Fly at constant height off the ground for simplicity
-        self.takeoff_speed = 1 # m/s
+        self.takeoff_speed = 3 # m/s
 
         self.frame_id = "world"
         
@@ -46,6 +48,12 @@ class MasterNode(object):
         self.goal_fixed_y = 20
         self.goal_fixed_z = self.flight_z
         self.goal_yaw = 0
+
+        # For use with fake global planner
+        # fake_goal = [25.346839904785156, 21.625633239746094, 2]
+        # self.goal_fixed_x = fake_goal[0]
+        # self.goal_fixed_y = fake_goal[1]
+        # self.goal_fixed_z = fake_goal[2]
 
         # Path mode
         # 0 - Local planner
