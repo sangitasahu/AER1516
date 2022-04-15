@@ -85,7 +85,7 @@ class LocalPlanner(object):
         self.coll_M = 1000 # Collision constraint upper bound
         self.n_int_max = 5 # Maximum number of JPS intervals
         self.n_plane_max = 8 # Maximum number of polyhedron planes per interval
-        self.log_settings = mosek.streamtype.wrn # Detail level of output
+        self.log_settings = mosek.streamtype.log # Detail level of output
         self.set_var_names = True # Label variable names or not. Performance is allegedly faster without
 
         self.plane_norm_zero_tol = 1E-1
@@ -107,16 +107,20 @@ class LocalPlanner(object):
         # Start MOSEK and initialize variables
         self.msk_env = mosek.Env()
         self.task = self.msk_env.Task()
+        self.task_feas_check = self.msk_env.Task()
 
         # Solver settings
         self.task.putintparam(mosek.iparam.mio_heuristic_level,0)
+        self.task_feas_check.putintparam(mosek.iparam.mio_heuristic_level,0)
 
         # Misc logging settings
         self.opt_run = False
         self.msk_env.set_Stream(self.log_settings, self.streamprinter) # Optimizer output
         self.task.set_Stream(self.log_settings, self.streamprinter) # Optimizer output
+        self.task_feas_check.set_Stream(self.log_settings, self.streamprinter) # Optimizer output
         self.task.putintparam(mosek.iparam.infeas_report_auto, mosek.onoffkey.on) # Infeasibility report
         self.task.putintparam(mosek.iparam.max_num_warnings,1) # Warning suppression(zeroing out constraints creates warnings)
+        self.task_feas_check.putintparam(mosek.iparam.max_num_warnings,1) # Warning suppression(zeroing out constraints creates warnings)
 
         self.task.putintparam(mosek.iparam.opf_write_solutions,mosek.onoffkey.off)
 
@@ -136,12 +140,15 @@ class LocalPlanner(object):
         self.num_bin = self.n_int_max*self.n_seg
 
         self.numvar = self.num_pos+self.num_vel+self.num_accel+self.num_jerk+self.num_bin
+        self.numvar_feas = self.num_pos + self.num_bin
 
         # Calculate indices of various locations for easy reference later
         self.ind_vel = self.num_pos
         self.ind_accel = self.ind_vel+self.num_vel
         self.ind_jerk = self.ind_accel+self.num_accel
         self.ind_bin = self.ind_jerk+self.num_jerk
+
+        self.ind_bin_feas = self.num_pos
 
         # Constraints:
         # Listed in the following order: Continuity, collision, consistency between p/v/a/j, binary variable sum
@@ -152,7 +159,10 @@ class LocalPlanner(object):
         self.num_cons = int(round(self.n_seg*3*self.spline_deg*(self.spline_deg+1)/2))
         self.num_bin_sum = self.n_seg
 
+        self.num_cont_feas = 3*(self.n_seg-1)
+
         self.numcon = int(round(self.num_cont+self.num_coll+self.num_cons+self.num_bin_sum))
+        self.numcon_feas = int(round(self.num_cont_feas + self.num_coll + self.num_bin_sum))
 
         # Calculate indices of various constraints for ease of reference later
         self.ind_coll = self.num_cont
@@ -167,9 +177,15 @@ class LocalPlanner(object):
         self.ind_cons_accel = self.ind_cons_vel+(self.n_cp-1)*3*self.n_seg
         self.ind_cons_jerk = self.ind_cons_accel+(self.n_cp-2)*3*self.n_seg
 
+        self.ind_coll_feas = self.num_cont_feas
+        self.ind_bin_sum_feas = self.ind_coll_feas + self.num_coll
+
         # Add variables
         self.task.appendvars(self.numvar)
         self.task.appendcons(self.numcon)
+
+        self.task_feas_check.appendvars(self.numvar_feas)
+        self.task_feas_check.appendcons(self.numcon_feas)
 
         # Storage for solution
         self.xx = np.zeros(self.numvar)
@@ -291,6 +307,50 @@ class LocalPlanner(object):
             for i in range(self.n_seg):
                 self.task.putconname(self.ind_bin_sum+i,'bin_sum_{}'.format(i))
 
+
+            # Set for feasibility solution as well
+            # Spline control point variables
+            # Organized as position ordered by control point, then axis, then segment
+            # ie p_3_1_x = 3rd position control point for first spline segment in x
+            for j in range(self.n_seg):
+                for k in range(3): # 3D
+                    for l in range(self.n_cp-i):
+                        self.task_feas_check.putvarname(j*3*self.n_cp+k*self.n_cp+l,
+                                                        'p_{}_{}_{}'.format(l,j,ax_lab[k]))
+
+            # Binary interval allocation variables
+            # Blocked by segment with one variable for each interval indicating if it's allocated to it
+            # ie b_1_5 = if segment 1 belongs to interval 5
+            for i in range(self.n_seg):
+                for j in range(self.n_int_max):
+                    self.task_feas_check.putvarname(self.ind_bin_feas+i*self.n_int_max+j,'b_{}_{}'.format(i,j))
+
+            # Constraints
+            # Continuity. Each segment will have a constraint in x/y/z
+            # ie cont_p_3_z = position continuity constraint for 3rd segment in z
+            for j in range(self.n_seg-1):
+                for k in range(len(ax_lab)):
+                    self.task_feas_check.putconname(self.ind_cont_pos+j*3+k,
+                                    'cont_p_{}_{}'.format(j,ax_lab[k]))
+            
+            # Collision Inequality
+            # Block by curve segments, then control points within each segment, then intervals segment could belong to
+            # then half planes that apply within that interval
+            # ie coll_3_2_5_0 = Collision constraint for 2nd control point of third segment against the 0th plane of the 5th interval
+            for i in range(self.n_seg):
+                for j in range(self.n_cp):
+                    for k in range(self.n_int_max):
+                        for l in range(self.n_plane_max):
+                            ind_coll_this = self.ind_coll_feas + self.n_plane_max*(k+self.n_int_max*(j+self.n_cp*i)) + l
+                            self.task_feas_check.putconname(ind_coll_this,
+                                            'coll_{}_{}_{}_{}'.format(i,j,k,l))
+
+            # Binary Variables
+            # Enforce that sum of binary variables for each segment is greater than or equal to 1
+            # ie a segment is allocated to at least one interval
+            for i in range(self.n_seg):
+                self.task_feas_check.putconname(self.ind_bin_sum_feas+i,'bin_sum_{}'.format(i))
+
         # Initialize constraint data for decision variables and linear constraints
         # Many of these will not change from run to run
         # ICs/BCs and which binary variables/plane constraints are active will be the main ones
@@ -321,6 +381,11 @@ class LocalPlanner(object):
 
         # Put the computed variable bounds on the task
         self.task.putvarboundslice(0,self.numvar,self.bkx,self.blx,self.bux)
+
+        # Feasibility task only has variable bounds for binary variables
+        self.task_feas_check.putvartypelist(np.arange(self.ind_bin_feas,self.ind_bin_feas+self.num_bin),[mosek.variabletype.type_int]*self.num_bin)
+        self.task_feas_check.putvarboundslice(self.ind_bin_feas,self.numvar_feas,
+                                            [mosek.boundkey.ra]*self.num_bin,np.zeros(self.num_bin),np.ones(self.num_bin))
 
         # Constraints
         self.bkc = [mosek.boundkey.fr]*self.numcon
@@ -482,8 +547,40 @@ class LocalPlanner(object):
 
         # Cost function changes weakly with timestep. Just quadratic with dTs on the diagonal for jerk decision variables
 
+        # Feasibility task constraints
+        bkc_feas = [mosek.boundkey.fr]*self.numcon_feas
+        blc_feas = np.zeros(self.numcon_feas)
+        buc_feas = np.zeros(self.numcon_feas)
+
+        # Constraint bound keys
+        # Continuity constraints get clamped to zero
+        bkc_feas[0:self.num_cont_feas] = [mosek.boundkey.fx]*self.num_cont_feas
+        # Half plane collision constraint keys will be set every loop as number of planes changes
+        # Binary sum constraints are lower bounds
+        bkc_feas[self.ind_bin_sum_feas:self.ind_bin_sum_feas+self.num_bin_sum] = [mosek.boundkey.lo]*self.num_bin_sum
+
+        # Continuity
+        # Position. Identical to full problem
+        self.task_feas_check.putarowslice(self.ind_cont_pos,self.ind_cont_vel,
+                            ptrb_pos,ptre_pos,a_sub_pos,a_val_pos)
+
+        # Binary variable sum constraints
+        # Simply just ones in a row for each segment's set of binary variables
+        a_sub_b_sum_feas = np.arange(self.ind_bin_feas,self.ind_bin_feas+self.num_bin)
+        
+        # Sum must be at least one
+        blc_feas[self.ind_bin_sum_feas:(self.ind_bin_sum_feas+self.n_seg)] = np.ones(self.n_seg)
+        
+        # Put coefficients for constraint
+        self.task_feas_check.putarowslice(self.ind_bin_sum_feas,self.ind_bin_sum_feas+self.num_bin_sum,
+                                        ptrb_b_sum,ptre_b_sum,a_sub_b_sum_feas,a_val_b_sum)
+
+        # Set constraint bounds
+        self.task_feas_check.putconboundslice(0,self.numcon_feas,bkc_feas,blc_feas,buc_feas)
+
         # Define objective function sense
         self.task.putobjsense(mosek.objsense.minimize)
+        self.task_feas_check.putobjsense(mosek.objsense.minimize)
 
     def __del__(self):
         # Close MOSEK
@@ -629,6 +726,25 @@ class LocalPlanner(object):
         # Put bounds on task
         self.task.putvarboundlist(b_ind_ic_bc,bkx_ic_bc,blx_ic_bc,bux_ic_bc)
 
+        # Feasibility problem needs these as well
+        blx_ic_bc_feas = np.hstack((x_0,x_f))
+        bux_ic_bc_feas = blx_ic_bc_feas
+        bkx_ic_bc_feas = [mosek.boundkey.fx]*3*2
+        b_ind_ic_bc_feas = []
+
+        # Initial conditions
+        for i in range(3):
+            ind_ic = j*self.n_cp
+            b_ind_ic_bc_feas.append(ind_ic)
+        
+        # Boundary conditions
+        for i in range(3):
+            ind_bc = 3*(self.n_seg-1)*(self.n_cp)+i*(self.n_cp)+self.n_cp-1
+            b_ind_ic_bc_feas.append(ind_bc)
+
+        # Put bounds on task
+        self.task_feas_check.putvarboundlist(b_ind_ic_bc_feas,bkx_ic_bc_feas,blx_ic_bc_feas,bux_ic_bc_feas)
+
         # Collision Inequality
         # Each timestep is a brand new day, do not know what was/wasn't active. Remove all constraints then reenable ones needed
         # Zero out inequality constraints from last timestep, fix all binary variables to zero
@@ -649,6 +765,14 @@ class LocalPlanner(object):
         self.blx[self.ind_bin:self.ind_bin+self.num_bin] = np.zeros(self.num_bin)
         self.bux[self.ind_bin:self.ind_bin+self.num_bin] = np.zeros(self.num_bin)
         self.task.putvarboundslice(self.ind_bin,self.ind_bin+self.num_bin,[mosek.boundkey.fx]*self.num_bin,
+                                    np.zeros(self.num_bin),np.zeros(self.num_bin))
+
+        # Also reset constraints and variable bounds for feasibility checking problem
+        self.task_feas_check.putarowslice(self.ind_coll_feas,self.ind_bin_sum_feas,ptrb_coll_clear,ptre_coll_clear,
+                                a_subj_coll_clear,a_val_coll_clear)
+        self.task_feas_check.putconboundslice(self.ind_coll_feas,self.ind_bin_sum_feas,[mosek.boundkey.fr]*self.num_coll,
+                                    np.zeros(self.num_coll),np.zeros(self.num_coll))
+        self.task_feas_check.putvarboundslice(self.ind_bin_feas,self.ind_bin_feas+self.num_bin,[mosek.boundkey.fx]*self.num_bin,
                                     np.zeros(self.num_bin),np.zeros(self.num_bin))
 
         # Now build collision constraints for this timestep
@@ -689,6 +813,7 @@ class LocalPlanner(object):
             coll_subi = (np.tile(coll_rel_nz_row_inds,(self.n_cp,1))+
                         np.arange(ind_coll_start,ind_coll_end-1,self.num_planes,dtype=np.int32).reshape((self.n_cp,1))).flatten(order='C')
             coll_subi_rep = np.tile(coll_subi,4)
+            coll_subi_rep_feas = coll_subi_rep + (self.ind_coll_feas-self.ind_coll)
 
             # Column indices need to be repeated num_planes times
             coll_subj_cps = np.tile(np.arange(i*3*self.n_cp,(i+1)*3*self.n_cp,dtype=np.int32),
@@ -696,6 +821,7 @@ class LocalPlanner(object):
 
             # Column indices of binary coefficients. Stacking order has them along diagonals for each control point
             coll_subj_bin = np.tile(self.ind_bin+i*self.n_int_max+coll_bin_rel_nz_col_inds,self.n_cp)
+            coll_subj_bin_feas = np.tile(self.ind_bin_feas+i*self.n_int_max+coll_bin_rel_nz_col_inds,self.n_cp)
             
             # Actual coefficients of constraint matrix are based on plane normals
             coll_a_x = np.tile(plane_norms_nz_x,self.n_cp)
@@ -714,6 +840,12 @@ class LocalPlanner(object):
             self.task.putconboundlist(coll_subi,[mosek.boundkey.up]*num_coll_actv,
                                     np.zeros(num_coll_actv),coll_b)
 
+            # Similar story for feasibility checking problem
+            self.task_feas_check.putaijlist(coll_subi_rep_feas,np.hstack((coll_subj_cps,coll_subj_bin_feas)),
+                            np.hstack((coll_a_x,coll_a_y,coll_a_z,coll_a_bin)))
+            self.task_feas_check.putconboundlist(coll_subi+(self.ind_coll_feas-self.ind_coll),[mosek.boundkey.up]*num_coll_actv,
+                                    np.zeros(num_coll_actv),coll_b)
+
             # Store constraint values and keys for reference
             # TODO: Had to unvectorize this b/c numpy was complaining. Probably is a way to do it though
             # self.bkc[coll_subi] = [mosek.boundkey.up]*num_coll_actv
@@ -729,6 +861,8 @@ class LocalPlanner(object):
         n_bin_actv = np.size(ind_bin_actv)
         self.task.putvarboundlist(ind_bin_actv,[mosek.boundkey.ra]*n_bin_actv,
                                 np.zeros(n_bin_actv),np.ones(n_bin_actv))
+        self.task_feas_check.putvarboundlist(ind_bin_actv + (self.ind_bin_feas-self.ind_bin),
+                                [mosek.boundkey.ra]*n_bin_actv,np.zeros(n_bin_actv),np.ones(n_bin_actv))
         
         # TODO: Again, unvectorized because of numpy complaining
         # self.bkx[ind_bin_actv] = [mosek.boundkey.ra]*n_bin_actv
@@ -739,6 +873,23 @@ class LocalPlanner(object):
             self.blx[ind_bin_actv[i]] = 0
             self.bux[ind_bin_actv[i]] = 1
         
+        # Call solver to check feasibility of given polyhedra
+        self.task_feas_check.optimize()
+        self.task.solutionsummary(mosek.streamtype.log)
+        self.task.optimizersummary(mosek.streamtype.log)
+
+        # Check solution status
+        prosta_feas = self.task.getprosta(mosek.soltype.itg)
+        solsta_feas = self.task.getsolsta(mosek.soltype.itg)
+
+        if (solsta_feas == mosek.solsta.unknown or solsta_feas == mosek.solsta.prim_infeas_cer
+            or solsta_feas == mosek.solsta.dual_infeas_cer or solsta_feas == mosek.solsta.prim_illposed_cer
+            or solsta_feas == mosek.solsta.dual_illposed_cer):
+            # Input polyhedra lead to an infeasible problem. Maintain current plan until receive a feasible set of inputs
+            rospy.loginfo("Infeasible polyhedra: {}, {} at t = {:.1f}".format(str(prosta_feas), 
+                                                                        str(solsta_feas),rospy.get_rostime().to_sec()))
+            return
+
         # Grab bounds on time allocation factor for this replanning iteration
         f_max_curr = self.f+self.gamma_up
         f_min_curr = self.f-self.gamma_down
