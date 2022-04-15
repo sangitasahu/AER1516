@@ -15,15 +15,34 @@
 #include "snapstack_msgs/State.h"
 #include <string>
 #include <cmath>
+#include <tf2/LinearMath/Matrix3x3.h>
+#include <tf2/LinearMath/Quaternion.h>
+#include <tf2/convert.h>
    
 ros::Publisher pubProb;
 ros::Publisher pubGrid;
-ros::Publisher pubPoints;
+ros::Publisher pubOccup;
 snapstack_msgs::State quad_state;
 geometry_msgs::TransformStamped tf_cam2world;
 geometry_msgs::Vector3 quad_pos;
 octomap::point3d  occupancyPoints3d; 
+geometry_msgs::Vector3 trans;
+tf2::Quaternion rot_tf;
 
+void tf_callback(const tf2_msgs::TFMessage& tf_msg)
+{
+
+    geometry_msgs::Quaternion rot;
+    tf_cam2world = tf_msg.transforms[0];
+
+    if(tf_cam2world.header.frame_id.compare("vicon") == 0){
+        trans = tf_cam2world.transform.translation;
+        rot = tf_cam2world.transform.rotation;
+        rot_tf = tf2::Quaternion(rot.x, rot.y, rot.z, rot.w);
+    }
+
+
+}
 
 void state_callback(const snapstack_msgs::State& state_msg)
 {
@@ -56,20 +75,35 @@ std::vector<geometry_msgs::Point32> grid_point_gen(geometry_msgs::Point32 offset
 
 }
 
+bool camera_fov_gen(float x, float y, float z){    
+    //camera cone
+    bool is_fov = false;
+    if (x>0. && x<=5. ){
+        
+        std::vector<float> camera_lower_limit{x, -1.73205*x, -x};
+        std::vector<float> camera_upper_limit{x, 1.73205*x, x};
+
+        if (y>=camera_lower_limit[1] && y<=camera_upper_limit[1] && z>=camera_lower_limit[2] && z<=camera_upper_limit[2]){
+            is_fov = true;    
+        }
+    }
+
+    return is_fov;
+
+}
+
+
 void octomap_binary_callback(const octomap_msgs::OctomapConstPtr& octomap_msg)
 {
 
     quad_pos = quad_state.pos;
-    //octomap::AbstractOcTree* tree = octomap_msgs::binaryMsgToMap(* octomap_msg);
-
-    //octomap::OcTree* octree = dynamic_cast<octomap::OcTree*>(tree);
 
     std::shared_ptr<octomap::OcTree> octree = std::shared_ptr<octomap::OcTree> (dynamic_cast<octomap::OcTree*> (octomap_msgs::msgToMap(* octomap_msg)));
 
     int z_scale_factor = 3;
-    float bbx_range = 12.;
+    float bbx_range = 3.;
     float bbx_range_z = bbx_range/z_scale_factor;
-    float resolution = 0.25;
+    float resolution = 0.5;
     //int bsize = static_cast<int>((bbx_upper-bbx_lower)/resolution);
     octomap::point3d  min_bbx;
     min_bbx.x() = round_val(quad_pos.x)-bbx_range/2;
@@ -94,70 +128,45 @@ void octomap_binary_callback(const octomap_msgs::OctomapConstPtr& octomap_msg)
     geometry_msgs::Point32 offset3d;
     sensor_msgs::ChannelFloat32 occupancyChannel;
     std::vector<geometry_msgs::Point32> points3d;
+    std::vector<geometry_msgs::Point32> Occup3d;
     std::vector<sensor_msgs::ChannelFloat32> occupancyChannels;
 
-    // octomap::point3d const origin_coord(quad_pos.x, quad_pos.y, quad_pos.z);
-    // octomap::point3d const direction_coord(2., 3., 1.);
-    // octomap::point3d end_coord;
 
-    // bool occupied_ray = octree->castRay(origin_coord, direction_coord, end_coord, false, 0.);
-
-    // ROS_INFO("%f", end_coord.x());
-    // ROS_INFO("%f", end_coord.y());
-    // ROS_INFO("%f", end_coord.z());
-
-    // ROS_INFO("%i", occupied_ray);
-
-    // octomap::point3d const direction_coord1(8., 0., 1.375);
-    // octomap::point3d end_coord1;
-
-    // bool occupied_ray1 = octree->castRay(origin_coord, direction_coord1, end_coord1);
-
-    // ROS_INFO("%f", end_coord1.x());
-    // ROS_INFO("%f", end_coord1.y());
-    // ROS_INFO("%f", end_coord1.z());
-
-    // ROS_INFO("%i", occupied_ray1);
-
-    offset3d.x = quad_pos.x;
+    offset3d.x = quad_pos.x; 
     offset3d.y = quad_pos.y;
     offset3d.z = quad_pos.z;
+    
+    //tf2::Matrix3x3 rotMat(rot); 
+
     grids3d = grid_point_gen(offset3d,min_bbx,max_bbx,resolution);
     gridOccupancy.resize(grids3d.size(), -1.);
 
-    for(int grid_index =0; grid_index<grids3d.size(); grid_index++){ 
+    for(int grid_index =0; grid_index<grids3d.size(); grid_index++){  
 
         float grid_x = grids3d[grid_index].x;
         float grid_y = grids3d[grid_index].y;
         float grid_z = grids3d[grid_index].z;
 
-        octomap::point3d const origin_coord(quad_pos.x, quad_pos.y, quad_pos.z);
-        octomap::point3d const direction_coord(grids3d[grid_index].x, grids3d[grid_index].y, grids3d[grid_index].z);
-        octomap::point3d end_coord;
+        float trans_x = grids3d[grid_index].x - trans.x;
+        float trans_y = grids3d[grid_index].y - trans.y;
+        float trans_z = grids3d[grid_index].z - trans.z;
 
-        bool occupied_ray = octree->castRay(origin_coord, direction_coord, end_coord);    
+        tf2::Vector3 trans_vec(trans_x, trans_y, trans_z);
 
-        // ROS_INFO("%i",occupied_ray);
-        // ROS_INFO("g");
+        tf2::Vector3 rot_vec;
+        rot_vec = tf2::quatRotate(rot_tf, trans_vec);
 
-        float norm_point = sqrt(pow(grid_x,2)+pow(grid_y,2)+pow(grid_z,2));
-        float norm_node = sqrt(pow(end_coord.x(),2)+pow(end_coord.y(),2)+pow(end_coord.z(),2));
+        float rot_x = rot_vec.x();
+        float rot_y = rot_vec.y();
+        float rot_z = rot_vec.z();
 
-        if(occupied_ray){
+        bool in_fov = camera_fov_gen(rot_x, rot_y, rot_z);
 
-            if(norm_node-norm_point>0.01){
-                gridOccupancy[grid_index]=0.;
-            }
-            //else if(abs(norm_node-norm_point)<resolution){
-            //    gridOccupancy[grid_index]=1.;
-            //}
+        if (in_fov){
+            gridOccupancy[grid_index] = 0.;
         }
-        else{
-            if(norm_node-norm_point>0) {
-                gridOccupancy[grid_index]=0.;
-            }
-            
-        }  
+
+
 
     }
 
@@ -205,50 +214,55 @@ void octomap_binary_callback(const octomap_msgs::OctomapConstPtr& octomap_msg)
 
         for(int grid_index =0; grid_index<grids3d.size(); grid_index++){ 
 
-
-            //if(abs(grids3d[grid_index].x-point3d.x)<1e-3 && abs(grids3d[grid_index].y-point3d.y)<1e-3 && abs(grids3d[grid_index].z-point3d.z)<1e-3){
             if (grids3d[grid_index].x>=rearLim && grids3d[grid_index].x<=frontLim && grids3d[grid_index].y>=rightLim && grids3d[grid_index].y<=leftLim && grids3d[grid_index].z>=lowerLim && grids3d[grid_index].z<=upperLim){
                 if(it->getOccupancy()>0.5){
                     gridOccupancy[grid_index] = 1.;
-                }
-                else{
-                    gridOccupancy[grid_index] = 0.;
-                }
-                
+                }   
             }
+
+            if (gridOccupancy[grid_index]==-1.){
+                points3d.push_back(grids3d[grid_index]);
+            }
+
+            if (gridOccupancy[grid_index]==1.){
+                Occup3d.push_back(grids3d[grid_index]);
+            }
+
+            
+
+
         }
 
-        points3d.push_back(point3d);
-
-        occupancyProb.push_back(it->getOccupancy());
 
     }
     
     //ROS_INFO("%d", gridOccupancy.size());
-
-    occupancyChannel.name = "occupancy probability";
-    occupancyChannel.values = occupancyProb;
-    occupancyChannels.push_back(occupancyChannel);    
 
     gridChannel.name = "grid occupancy";
     gridChannel.values = gridOccupancy;
     gridChannels.push_back(gridChannel);
 
 
+    sensor_msgs::PointCloud unknown_info;
+    unknown_info.header.frame_id = "vicon";
+    unknown_info.header.stamp = ros::Time(0);
+    unknown_info.points = points3d;
+
     sensor_msgs::PointCloud occupancy_info;
     occupancy_info.header.frame_id = "vicon";
     occupancy_info.header.stamp = ros::Time(0);
-    occupancy_info.points = points3d;
-    occupancy_info.channels = occupancyChannels;
-    
+    occupancy_info.points = Occup3d;
+
+
+
     sensor_msgs::PointCloud grid_info;
     grid_info.header.frame_id = "vicon";
     grid_info.header.stamp = ros::Time(0);   
     grid_info.points = grids3d;
     grid_info.channels = gridChannels;
 
-
-    pubProb.publish(occupancy_info); 
+    pubProb.publish(unknown_info);
+    pubOccup.publish(occupancy_info); 
     pubGrid.publish(grid_info);
 
     
@@ -260,13 +274,18 @@ int main(int argc, char **argv)
     ros::init(argc, argv, "octomapListener");
     ros::NodeHandle n;
     ros::Subscriber sub = n.subscribe("octomap_binary", 1000, octomap_binary_callback);
+    
     ros::NodeHandle state;
     ros::Subscriber sub_state = state.subscribe("/SQ01s/state", 10, state_callback);  
+
+    ros::NodeHandle tf;
+    ros::Subscriber sub_tf = tf.subscribe("/tf", 10, tf_callback);  
+
     ros::NodeHandle occupancyProbability; 
     ros::NodeHandle gridNode;
-    ros::NodeHandle points;
-    pubProb = occupancyProbability.advertise<sensor_msgs::PointCloud>("probability_publisher",1000);
+    ros::NodeHandle free;
+    pubProb = occupancyProbability.advertise<sensor_msgs::PointCloud>("unknown_grid",1000);
     pubGrid = gridNode.advertise<sensor_msgs::PointCloud>("grid_publisher",1000);
-
+    pubOccup = occupancyProbability.advertise<sensor_msgs::PointCloud>("occup_grid",1000);
     ros::spin();    
 }
