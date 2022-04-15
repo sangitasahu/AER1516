@@ -1,0 +1,14 @@
+<launch>
+	<!-- Master Node -->
+	<node name="master_node" pkg="master_node" type="master_node_script.py"/>
+
+	<!-- Fake Global Planner -->
+	<node name="fake_global_planner" pkg="local_planner" type="fake_global_planner.py"/>
+	
+	<!-- Convex Decomposition -->
+    <node name="cvx_decomp" pkg="convex_decomposer" type="cvx_decomp.py"/>
+
+	<!-- Local Planner -->
+	<node name="local_planner" pkg="local_planner" type="local_planner_node.py"/>
+
+</launch>
