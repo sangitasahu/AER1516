@@ -88,9 +88,11 @@ class LocalPlanner(object):
         self.log_settings = mosek.streamtype.wrn # Detail level of output
         self.set_var_names = True # Label variable names or not. Performance is allegedly faster without
 
+        self.plane_norm_zero_tol = 1E-1
+
         # Time line search parameters
         self.f = 2.25 # Factor on constant motion solution. Start conservatively
-        self.f_min = 1.25
+        self.f_min = 2.25
         self.f_max = 5
         self.gamma_up = 0.75 # Limit on how much time factor can increase/decrease on each timestep
         self.gamma_down = 0.25
@@ -99,7 +101,7 @@ class LocalPlanner(object):
         self.max_line_search_it = 5
         self.last_soln_good = False
         self.inst_capability_usage = 0
-        self.inst_capability_usage_margin = 0.05 # Margin to keep on v/a/j usage when decreasing time scale factor to prevent infeasibility
+        self.inst_capability_usage_margin = 0.1 # Margin to keep on v/a/j usage when decreasing time scale factor to prevent infeasibility
         self.t_replan_margin = 0.05 # Margin on allowable replanning time to use when performing line search
 
         # Start MOSEK and initialize variables
@@ -520,11 +522,11 @@ class LocalPlanner(object):
 
         # Problem size
         # Clip to maximum number of intervals and planes
-        n_int = min(len(cvx_decomp.polyhedra),self.n_int_max)
-        n_int_glob = min(len(global_plan.poses),self.n_int_max)
-        n_glob_last = min(n_int,n_int_glob)
-        if n_int == 0 or n_int_glob == 0:
-            rospy.loginfo('Invalid global path or convex decomposition length. Global:{}, CvxDecomp:{}'.format(n_int_glob,n_int))
+        n_int_poly = min(len(cvx_decomp.polyhedra),self.n_int_max)
+        n_int_glob = min(len(global_plan.poses)-1,self.n_int_max)
+        n_int = min(n_int_poly,n_int_glob)
+        if n_int_poly <= 0 or n_int_glob <= 0:
+            rospy.loginfo('Invalid global path or convex decomposition length. Global:{}, CvxDecomp:{}'.format(n_int_glob,n_int_poly))
             return        
         elif not(n_int==n_int_glob):
             rospy.loginfo("Number of polyhedra does not match global path length({}~={})".format(n_int,n_int_glob))
@@ -589,9 +591,9 @@ class LocalPlanner(object):
                                         self.dT_traj_comm*np.ones(self.n_seg),t_plan_start-self.t_traj_comm_start,n=1).flatten()
                 a_0 = a_0_future
 
-        x_f = np.array([global_plan.poses[n_glob_last-1].pose.position.x,
-                        global_plan.poses[n_glob_last-1].pose.position.y,
-                        global_plan.poses[n_glob_last-1].pose.position.z])
+        x_f = np.array([global_plan.poses[n_int].pose.position.x,
+                        global_plan.poses[n_int].pose.position.y,
+                        global_plan.poses[n_int].pose.position.z])
         v_f = np.zeros(3)
         a_f = np.zeros(3)
 
@@ -656,6 +658,9 @@ class LocalPlanner(object):
         plane_present = np.zeros((self.n_int_max,self.n_plane_max))
         for i in range(n_int):
             for j in range(n_planes[i]):
+                if np.linalg.norm(np.asarray(cvx_decomp.polyhedra[i].planes[j].coef[0:3])) < self.plane_norm_zero_tol:
+                    # Skip invalid planes
+                    continue
                 plane_norms[i,j,:] = cvx_decomp.polyhedra[i].planes[j].coef[0:3]
                 plane_coefs[i,j] = cvx_decomp.polyhedra[i].planes[j].coef[3]
                 plane_present[i,j] = 1
@@ -826,13 +831,14 @@ class LocalPlanner(object):
                     # Bad exit code. If we have time to do another solution increase time factor and try again
                     rospy.loginfo("Bad solver exit status: {}, {}. Trying again".format(str(prosta), str(solsta)))
                     rospy.loginfo("At t = {:.1f} s. f: {:.2f}".format(t_opt_finish.to_sec(),self.f))
-                    rospy.loginfo('x_0 = {}'.format(x_0))
+                    # rospy.loginfo('x_0 = {}'.format(x_0))
                     continue
                 else:
                     # Bad exit code and out of time. Keep flying off of last solution
                     rospy.loginfo("Line search ended in bad solver exit status: {}, {}".format(str(prosta), str(solsta)))
                     rospy.loginfo("At t = {:.1f} s.f: {:.2f}".format(t_opt_finish.to_sec(),self.f))
-                    rospy.loginfo('x_0 = {}'.format(x_0))
+                    # rospy.loginfo('x_0 = {}'.format(x_0))
+                    # self.task.writedata('failed_run.opf')
                     return
             else:
                 # Bad exit code and not performing line search. Keep flying off of last solution
