@@ -102,6 +102,7 @@ class LocalPlanner(object):
         self.last_soln_good = False
         self.inst_capability_usage = 0
         self.inst_capability_usage_margin = 0.1 # Margin to keep on v/a/j usage when decreasing time scale factor to prevent infeasibility
+        self.n_int_capability_margin = 5 # How many intervals to check the capability margin condition over
         self.t_replan_margin = 0.05 # Margin on allowable replanning time to use when performing line search
 
         # Start MOSEK and initialize variables
@@ -215,14 +216,23 @@ class LocalPlanner(object):
         self.t_traj_comm_start = 0
         self.dT_traj_comm = 10 # Nonzero value, avoid zero division
 
-        # Tolerances on if we replan when we get close to the goal, solver is unstable when you're too close to the goal
-        self.goal_pos_tol = 1E-1
+        # Parameters for goal and yaw tolerances for handling starting/stopping conditions
+        # Solver is unstable when you're too close to the goal and camera isn't going to provide good images if you're not roughly pointed towards the goal
+        self.goal_pos_tol = 2E-1
         self.goal_cp_tol = 1E-4
+        self.goal_FOV = 120*pi/180 # rad
+
+        self.reached_goal = False
+        self.goal_in_view = False
 
         self.yaw_filt_val = 0
         self.yaw_tol = 1E-2
         self.yaw_filt_cutoff = 10 # Hz
         self.yaw_filt_coef = (2*pi*self.yaw_filt_cutoff/self.goal_freq)/(1+2*pi*self.yaw_filt_cutoff/self.goal_freq)
+        self.yaw_rate_max = 360*pi/180 # rad/s
+        self.yaw_rate_find_goal = 45*pi/180 # rad/s
+        self.yaw_change_max = self.yaw_rate_max/self.goal_freq
+        self.yaw_change_find_goal_max = self.yaw_rate_find_goal/self.goal_freq
 
         # Option to plan from future or last reported state
         self.plan_start_future = True
@@ -615,14 +625,25 @@ class LocalPlanner(object):
         global_plan = copy.deepcopy(self.glob_plan)
         cvx_decomp = copy.deepcopy(self.cvx_decomp)
 
-        # See if we've reached the goal within tolerance. If so don't need to keep planning, solver can be unstable
+        # See if we've reached the goal within tolerance. If so don't need to keep planning, solver can be unstable and yaw angle can go crazy
         d_goal = np.sqrt((state_start.pos.x - self.global_goal.point.x)**2 +
                           (state_start.pos.y - self.global_goal.point.y)**2 +
                           (state_start.pos.z - self.global_goal.point.z)**2)
         d_goal_cp = np.sqrt((self.cp_p_comm[3*self.n_cp*(self.n_seg-1)+(self.n_cp-1)] - self.global_goal.point.x)**2 +
                           (self.cp_p_comm[3*self.n_cp*(self.n_seg-1)+(2*self.n_cp-1)] - self.global_goal.point.y)**2 +
                           (self.cp_p_comm[3*self.n_cp*(self.n_seg-1)+(3*self.n_cp-1)] - self.global_goal.point.z)**2)
-        if d_goal < self.goal_pos_tol and d_goal_cp < self.goal_cp_tol:
+        self.reached_goal = d_goal < self.goal_pos_tol and d_goal_cp < self.goal_cp_tol
+
+        if self.reached_goal:
+            return
+
+        # Check if we can see goal within tolerance. Stop come to a stop and rotate until we can see goal
+        heading_goal = np.arctan2(self.global_goal.point.y-state_start.pos.y,self.global_goal.point.x-state_start.pos.x)
+        quat_quad = [state_start.quat.x,state_start.quat.y,state_start.quat.z,state_start.quat.w]
+        euler_quad = euler_from_quaternion(quat_quad,'rzyx')
+        self.goal_in_view = np.abs(heading_goal - euler_quad[0])<(self.goal_FOV/2)
+
+        if not self.goal_in_view:
             return
 
         # Problem size
@@ -905,9 +926,11 @@ class LocalPlanner(object):
             if self.perform_line_search and self.opt_run:
                 # Dynamically adjust time allocation factor to find faster time trajectories
                 # Time allocation factor is constant otherwise
-                if self.last_soln_good and (self.inst_capability_usage < (1-self.inst_capability_usage_margin)):
-                    # Last timestep successfully found a solution and had capability margin. Try to decrease the time allocation factor
-                    self.f = max(f_min_curr,self.f_min)
+                if self.last_soln_good:
+                    if (self.inst_capability_usage < (1-self.inst_capability_usage_margin)):
+                        # Last timestep successfully found a solution and had capability margin. Try to decrease the time allocation factor
+                        # Else, maintain it
+                        self.f = max(f_min_curr,self.f_min)
                 else:
                     # Did not find a solution last iteration. Bump up time allocation factor
                     self.f = min(self.f+self.gamma_step,f_max_curr,self.f_max)
@@ -1021,9 +1044,9 @@ class LocalPlanner(object):
         # prevent infeasbility
         # TODO: This is a hack to get something working. The proper way is to make the constraints at the first interval
         # soft constraints and back off the time factor if the slack variables become active. Future work item possibly
-        self.inst_capability_usage = np.max(np.hstack((np.abs(self.cp_v_opt[0:3*(self.n_cp-1)])/self.v_max,
-                                                        np.abs(self.cp_a_opt[0:3*(self.n_cp-2)])/self.a_max,
-                                                        np.abs(self.cp_j_opt[0:3*(self.n_cp-3)])/self.j_max)))
+        self.inst_capability_usage = np.max(np.hstack((np.abs(self.cp_v_opt[0:3*(self.n_cp-1)*self.n_int_capability_margin])/self.v_max,
+                                                        np.abs(self.cp_a_opt[0:3*(self.n_cp-2)*self.n_int_capability_margin])/self.a_max,
+                                                        np.abs(self.cp_j_opt[0:3*(self.n_cp-3)*self.n_int_capability_margin])/self.j_max)))
 
         # Fake planning option just runs from starting position
         if self.fake_plan:
@@ -1059,6 +1082,8 @@ class LocalPlanner(object):
         # Interpolate local plan at current time
         t_curr = rospy.get_rostime()
         t_curr_s = t_curr.to_sec()
+
+        state_start = copy.deepcopy(self.state)
 
         # See if we should update committed trajectory to latest optimal trajectory
         # TODO: Potentially need to address thread safety here, optimizer could be finishing as this runs
@@ -1100,14 +1125,28 @@ class LocalPlanner(object):
         goal_new.j.y = goal_j_interp[1]
         goal_new.j.z = goal_j_interp[2]
 
-        # Align yaw with velocity direction
-        # Slap a first order lag filter on it and clamp if speed is below a threshold
-        if abs(goal_v_interp[0])<self.yaw_tol and abs(goal_v_interp[1])<self.yaw_tol:
-            new_yaw_targ = self.yaw_filt_val
+        # Set yaw angle based on if we've reached or can see the goal
+        if self.reached_goal:
+            # Reached goal, clamp yaw value
+            goal_new.yaw = self.yaw_filt_val
+        elif not self.goal_in_view:
+            # Rotate yaw angle towards goal
+            heading_goal = np.arctan2(self.global_goal.point.y-state_start.pos.y,self.global_goal.point.x-state_start.pos.x)
+            # quat_quad = [state_start.quat.x,state_start.quat.y,state_start.quat.z,state_start.quat.w]
+            # euler_quad = euler_from_quaternion(quat_quad,'rzyx')
+            delta_yaw = heading_goal - self.yaw_filt_val
+            self.yaw_filt_val = self.yaw_filt_val + max(min(delta_yaw,self.yaw_change_find_goal_max),-self.yaw_change_find_goal_max)
+            goal_new.yaw = self.yaw_filt_val
         else:
-            new_yaw_targ = np.arctan2(goal_v_interp[1],goal_v_interp[0])
-        self.yaw_filt_val = self.yaw_filt_coef*new_yaw_targ+(1-self.yaw_filt_coef)*self.yaw_filt_val
-        goal_new.yaw = self.yaw_filt_val
+            # Align yaw with planned velocity direction
+            # Slap a first order lag filter on it and clamp if speed is below a threshold
+            if abs(goal_v_interp[0])<self.yaw_tol and abs(goal_v_interp[1])<self.yaw_tol:
+                new_yaw_targ = self.yaw_filt_val
+            else:
+                new_yaw_targ = np.arctan2(goal_v_interp[1],goal_v_interp[0])
+            yaw_filt = self.yaw_filt_coef*new_yaw_targ+(1-self.yaw_filt_coef)*self.yaw_filt_val
+            self.yaw_filt_val = max(min(yaw_filt,self.yaw_filt_val+self.yaw_change_max),self.yaw_filt_val-self.yaw_change_max)
+            goal_new.yaw = self.yaw_filt_val
         
         goal_new.header = Header(stamp=t_curr,frame_id = self.frame_id)
 
