@@ -6,17 +6,13 @@
 	
 	<!-- Octomap Launch -->
 	<node pkg="octomap_server" type="octomap_server_node" name="octomap_server">
-		<param name="resolution" value="0.25" />
+		<param name="resolution" value="0.5" />
 
 		<!-- fixed map frame (set to 'map' if SLAM or localization running!) -->
 		<param name="frame_id" type="string" value="vicon" />
-		<param name="base_frame_id" type="string" value="vicon" />
 
 		<!-- maximum range to integrate (speedup!) -->
 		<param name="sensor_model/max_range" value="10.0" />
-		<param name="filter_ground" type="bool" value="true" />
-		<param name="ground_filter/distance" type="double" value="0.1" />
-		<param name="ground_filter/plane_distance" type="double" value="0.1" />
 
 		<!-- data source to integrate (PointCloud2) -->
 		<remap from="cloud_in" to="/SQ01s/camera/cloud" />
