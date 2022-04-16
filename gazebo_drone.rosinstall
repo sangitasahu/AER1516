@@ -6,7 +6,4 @@
     local-name: snapstack_msgs
     uri: https://gitlab.com/mit-acl/fsw/snap-stack/snapstack_msgs.git
     version: 3e1dee9616bd7e8a467bce5a66c947ebf13a79d8
-- git:
-    local-name: acl-mapping
-    uri: https://gitlab.com/mit-acl/lab/acl-mapping
-    version: 821655dc687cfeec6d4818b73d7633fc5b665987
+
