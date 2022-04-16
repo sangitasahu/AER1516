@@ -40,8 +40,8 @@ class cvx_decomp(object):
     """
     def __init__(self):
         # Declare Publishers and Subscibers
-        self.point_cloud = '/grid_publisher'
-        self.path = '/global_plan'
+        self.point_cloud = '/SQ01s/global_mapper_ros/occupancy_grid1'
+        self.path = '/SQ01s/faster/global_plan'
         self.point_cloud_sub = rospy.Subscriber(self.point_cloud,PointCloud,self.point_cloud_proc)
         self.path_sub = rospy.Subscriber(self.path,Path,self.path_processor)
         self.pub_CvxDecomp = rospy.Publisher('/CvxDecomp',CvxDecomp,queue_size=1)
@@ -81,6 +81,7 @@ class cvx_decomp(object):
     """Function to store the current trajectory msg to be passed to the Position Controller"""
     def point_cloud_proc(self,msg):
         #split the pointcloud to free and occupied points
+        self.threading_lock.acquire()
         cloud = msg.points
         cloud_list = [[point.x,point.y,point.z] for point in cloud]
         if msg.channels:
@@ -88,6 +89,7 @@ class cvx_decomp(object):
             self.obs_cloud = pcp.get_obs(cloud_list,cloud_channel)
         else:
             self.obs_cloud = np.array(cloud_list)
+        self.threading_lock.release()
 
     def path_processor(self,msg):
         self.path_list = msg.poses
@@ -134,7 +136,7 @@ class cvx_decomp(object):
             complex_polyhedron = cvx_planes+bbox_polyhedron
             #Simplify the plyhedrons to get inner polyhedrons only 
             # Plan is to simply eliminate planes that are parallel by distance to path segment in question.
-            required_polyhedron = np.array(plane_utils.eliminate_redundant_planes(complex_polyhedron))
+            required_polyhedron = np.array(plane_utils.eliminate_redundant_planes(complex_polyhedron,d))
             #vertices = plane_utils.calculate_vertices(complex_polyhedron)
             ###Pending work<<< 
             #FIND A FOOL PROOF WAY TO LIMIT TOTAL NUMBER OF PLANES IN A POLYHEDRA?
