@@ -21,7 +21,7 @@
 #include "faster_types.hpp"
 // Solvers includes
 //#include "solvers/solvers.hpp" CVXGEN solver interface
-#include "solverGurobi.hpp"
+//#include "solverGurobi.hpp"
 #include "jps_manager.hpp"
 
 #define MAP 1          // MAP refers to the occupancy grid
@@ -71,8 +71,8 @@ private:
 
   double previous_yaw_ = 0.0;
 
-  SolverGurobi sg_whole_;  // solver gurobi whole trajectory
-  SolverGurobi sg_safe_;   // solver gurobi whole trajectory
+  //SolverGurobi sg_whole_;  // solver gurobi whole trajectory
+  //SolverGurobi sg_safe_;   // solver gurobi whole trajectory
 
   JPS_Manager jps_manager_;  // Manager of JPS
 

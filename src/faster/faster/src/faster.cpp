@@ -48,7 +48,7 @@ Faster::Faster(parameters par) : par_(par)
 
   double max_values[3] = { par_.v_max, par_.a_max, par_.j_max };
 
-  // Setup of sg_whole_
+  /*// Setup of sg_whole_
   sg_whole_.setN(par_.N_whole);
   sg_whole_.createVars();
   sg_whole_.setDC(par_.dc);
@@ -68,7 +68,7 @@ Faster::Faster(parameters par) : par_(par)
   sg_safe_.setFactorInitialAndFinalAndIncrement(1, 10, par_.increment_safe);
   sg_safe_.setVerbose(par_.gurobi_verbose);
   sg_safe_.setThreads(par_.gurobi_threads);
-  sg_safe_.setWMax(par_.w_max);
+  sg_safe_.setWMax(par_.w_max);*/
 
   pclptr_unk_ = pcl::PointCloud<pcl::PointXYZ>::Ptr(new pcl::PointCloud<pcl::PointXYZ>);
   pclptr_map_ = pcl::PointCloud<pcl::PointXYZ>::Ptr(new pcl::PointCloud<pcl::PointXYZ>);
@@ -226,8 +226,8 @@ void Faster::replan(vec_Vecf<3>& JPS_safe_out, vec_Vecf<3>& JPS_whole_out, vec_E
     return;
   }
 
-  sg_whole_.ResetToNormalState();
-  sg_safe_.ResetToNormalState();
+  //sg_whole_.ResetToNormalState();
+  //sg_safe_.ResetToNormalState();
 
   //////////////////////////////////////////////////////////////////////////
   ///////////////////////// G <-- Project GTerm ////////////////////////////
@@ -327,9 +327,9 @@ void Faster::replan(vec_Vecf<3>& JPS_safe_out, vec_Vecf<3>& JPS_whole_out, vec_E
     E.pos = (isGinside_whole == true) ? G.pos : E.pos;
 
     // Set Initial cond, Final cond, and polytopes for the whole traj
-    sg_whole_.setX0(A);
-    sg_whole_.setXf(E);
-    sg_whole_.setPolytopes(l_constraints_whole_);
+    //sg_whole_.setX0(A);
+    //sg_whole_.setXf(E);
+    //sg_whole_.setPolytopes(l_constraints_whole_);
 
     /*    std::cout << "Initial Position is inside= " << l_constraints_whole_[l_constraints_whole_.size() -
        1].inside(A.pos)
@@ -338,20 +338,20 @@ void Faster::replan(vec_Vecf<3>& JPS_safe_out, vec_Vecf<3>& JPS_whole_out, vec_E
                   << std::endl;
     */
     // Solve with Gurobi
-    MyTimer whole_gurobi_t(true);
-    bool solved_whole = sg_whole_.genNewTraj();
+    //MyTimer whole_gurobi_t(true);
+    //bool solved_whole = sg_whole_.genNewTraj();
 
-    if (solved_whole == false)
-    {
-      std::cout << bold << red << "No solution found for the whole trajectory" << reset << std::endl;
-      return;
-    }
+    //if (solved_whole == false)
+    //{
+//      std::cout << bold << red << "No solution found for the whole trajectory" << reset << std::endl;
+      //return;
+    //}
 
     // Get Results
-    sg_whole_.fillX();
+    //sg_whole_.fillX();
 
     // Copy for visualization
-    X_whole_out = sg_whole_.X_temp_;
+    //X_whole_out = sg_whole_.X_temp_;
     JPS_whole_out = JPS_whole;
   }
   else
@@ -359,7 +359,7 @@ void Faster::replan(vec_Vecf<3>& JPS_safe_out, vec_Vecf<3>& JPS_whole_out, vec_E
     state dummy;
     std::vector<state> dummy_vector;
     dummy_vector.push_back(dummy);
-    sg_whole_.X_temp_ = dummy_vector;
+    //sg_whole_.X_temp_ = dummy_vector;
   }
 
   return;
