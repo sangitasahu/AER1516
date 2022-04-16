@@ -85,14 +85,14 @@ class LocalPlanner(object):
         self.coll_M = 1000 # Collision constraint upper bound
         self.n_int_max = 5 # Maximum number of JPS intervals
         self.n_plane_max = 8 # Maximum number of polyhedron planes per interval
-        self.log_settings = mosek.streamtype.log # Detail level of output
+        self.log_settings = mosek.streamtype.wrn # Detail level of output
         self.set_var_names = True # Label variable names or not. Performance is allegedly faster without
 
         self.plane_norm_zero_tol = 1E-1
 
         # Time line search parameters
         self.f = 2.25 # Factor on constant motion solution. Start conservatively
-        self.f_min = 2.25
+        self.f_min = 1.25
         self.f_max = 5
         self.gamma_up = 0.75 # Limit on how much time factor can increase/decrease on each timestep
         self.gamma_down = 0.25
@@ -108,6 +108,8 @@ class LocalPlanner(object):
         self.msk_env = mosek.Env()
         self.task = self.msk_env.Task()
         self.task_feas_check = self.msk_env.Task()
+        self.task.puttaskname('Local Planner MIQP')
+        self.task_feas_check.puttaskname('Local Planner Feasibility Check')
 
         # Solver settings
         self.task.putintparam(mosek.iparam.mio_heuristic_level,0)
@@ -119,6 +121,7 @@ class LocalPlanner(object):
         self.task.set_Stream(self.log_settings, self.streamprinter) # Optimizer output
         self.task_feas_check.set_Stream(self.log_settings, self.streamprinter) # Optimizer output
         self.task.putintparam(mosek.iparam.infeas_report_auto, mosek.onoffkey.on) # Infeasibility report
+        self.task_feas_check.putintparam(mosek.iparam.infeas_report_auto, mosek.onoffkey.on) # Infeasibility report
         self.task.putintparam(mosek.iparam.max_num_warnings,1) # Warning suppression(zeroing out constraints creates warnings)
         self.task_feas_check.putintparam(mosek.iparam.max_num_warnings,1) # Warning suppression(zeroing out constraints creates warnings)
 
@@ -314,7 +317,7 @@ class LocalPlanner(object):
             # ie p_3_1_x = 3rd position control point for first spline segment in x
             for j in range(self.n_seg):
                 for k in range(3): # 3D
-                    for l in range(self.n_cp-i):
+                    for l in range(self.n_cp):
                         self.task_feas_check.putvarname(j*3*self.n_cp+k*self.n_cp+l,
                                                         'p_{}_{}_{}'.format(l,j,ax_lab[k]))
 
@@ -382,7 +385,11 @@ class LocalPlanner(object):
         # Put the computed variable bounds on the task
         self.task.putvarboundslice(0,self.numvar,self.bkx,self.blx,self.bux)
 
-        # Feasibility task only has variable bounds for binary variables
+        # Feasibility task variable bounds only exist for positions and binary variables
+        bkx_feas = [mosek.boundkey.fr]*self.num_pos
+        blx_feas = np.zeros(self.num_pos)
+        bux_feas = blx_feas
+        self.task_feas_check.putvarboundslice(0,self.num_pos,bkx_feas,blx_feas,bux_feas)
         self.task_feas_check.putvartypelist(np.arange(self.ind_bin_feas,self.ind_bin_feas+self.num_bin),[mosek.variabletype.type_int]*self.num_bin)
         self.task_feas_check.putvarboundslice(self.ind_bin_feas,self.numvar_feas,
                                             [mosek.boundkey.ra]*self.num_bin,np.zeros(self.num_bin),np.ones(self.num_bin))
@@ -585,6 +592,7 @@ class LocalPlanner(object):
     def __del__(self):
         # Close MOSEK
         self.task.__del__()
+        self.task_feas_check.__del__()
         self.msk_env.__del__()
 
     def replan(self):
@@ -734,12 +742,12 @@ class LocalPlanner(object):
 
         # Initial conditions
         for i in range(3):
-            ind_ic = j*self.n_cp
+            ind_ic = i*self.n_cp
             b_ind_ic_bc_feas.append(ind_ic)
         
         # Boundary conditions
         for i in range(3):
-            ind_bc = 3*(self.n_seg-1)*(self.n_cp)+i*(self.n_cp)+self.n_cp-1
+            ind_bc = 3*(self.n_seg-1)*self.n_cp+i*(self.n_cp)+self.n_cp-1
             b_ind_ic_bc_feas.append(ind_bc)
 
         # Put bounds on task
@@ -875,12 +883,10 @@ class LocalPlanner(object):
         
         # Call solver to check feasibility of given polyhedra
         self.task_feas_check.optimize()
-        self.task.solutionsummary(mosek.streamtype.log)
-        self.task.optimizersummary(mosek.streamtype.log)
 
         # Check solution status
-        prosta_feas = self.task.getprosta(mosek.soltype.itg)
-        solsta_feas = self.task.getsolsta(mosek.soltype.itg)
+        prosta_feas = self.task_feas_check.getprosta(mosek.soltype.itg)
+        solsta_feas = self.task_feas_check.getsolsta(mosek.soltype.itg)
 
         if (solsta_feas == mosek.solsta.unknown or solsta_feas == mosek.solsta.prim_infeas_cer
             or solsta_feas == mosek.solsta.dual_infeas_cer or solsta_feas == mosek.solsta.prim_illposed_cer
