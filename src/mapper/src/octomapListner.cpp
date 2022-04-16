@@ -79,10 +79,10 @@ std::vector<geometry_msgs::Point32> grid_point_gen(geometry_msgs::Point32 offset
 bool camera_fov_gen(float x, float y, float z){    
     //camera cone
     bool is_fov = false;
-    if (x>0. && x<=5. ){
+    if (x>0. && x<=10. ){
         
-        std::vector<float> camera_lower_limit{x, -1.73205*x, -x};
-        std::vector<float> camera_upper_limit{x, 1.73205*x, x};
+        std::vector<float> camera_lower_limit{x, float(-1.73205)*x, -x};
+        std::vector<float> camera_upper_limit{x, float(1.73205)*x, x};
 
         if (y>=camera_lower_limit[1] && y<=camera_upper_limit[1] && z>=camera_lower_limit[2] && z<=camera_upper_limit[2]){
             is_fov = true;    
