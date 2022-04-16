@@ -38,7 +38,8 @@ void tf_callback(const tf2_msgs::TFMessage& tf_msg)
     if(tf_cam2world.header.frame_id.compare("vicon") == 0){
         trans = tf_cam2world.transform.translation;
         rot = tf_cam2world.transform.rotation;
-        rot_tf = tf2::Quaternion(rot.x, rot.y, rot.z, rot.w);
+        tf2::Quaternion rot_tf_inv = tf2::Quaternion(rot.x, rot.y, rot.z, rot.w);
+        rot_tf = rot_tf_inv.inverse();  
     }
 
 
@@ -194,20 +195,20 @@ void octomap_binary_callback(const octomap_msgs::OctomapConstPtr& octomap_msg)
         float lowerLim;
 
         if(it->getOccupancy()>0.5){
-            frontLim = point3d.x + (resolution+0.1*resolution);
-            rearLim = point3d.x - (resolution+0.1*resolution);
-            leftLim = point3d.y + (resolution+0.1*resolution);
-            rightLim = point3d.y - (resolution+0.1*resolution);
-            upperLim = point3d.z + (resolution+0.1*resolution);
-            lowerLim = point3d.z - (resolution+0.1*resolution);
+            frontLim = point3d.x + (resolution);
+            rearLim = point3d.x - (resolution);
+            leftLim = point3d.y + (resolution);
+            rightLim = point3d.y - (resolution);
+            upperLim = point3d.z + (resolution);
+            lowerLim = point3d.z - (resolution);
         }
         else{
-            frontLim = point3d.x + (resolution-0.2*resolution);
-            rearLim = point3d.x - (resolution-0.2*resolution);
-            leftLim = point3d.y + (resolution-0.2*resolution);
-            rightLim = point3d.y - (resolution-0.2*resolution);
-            upperLim = point3d.z + (resolution-0.2*resolution);
-            lowerLim = point3d.z - (resolution-0.2*resolution);
+            frontLim = point3d.x + (resolution);
+            rearLim = point3d.x - (resolution);
+            leftLim = point3d.y + (resolution);
+            rightLim = point3d.y - (resolution);
+            upperLim = point3d.z + (resolution);
+            lowerLim = point3d.z - (resolution);
         }
 
 
