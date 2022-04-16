@@ -22,7 +22,7 @@ class local_planner_test_talker:
         # Publishers
         self.glob_plan_topic = 'global_plan'
         self.glob_plan_pub = rospy.Publisher(self.glob_plan_topic,Path,queue_size=10)
-        self.cvx_decomp_topic = 'cvx_decomp'
+        self.cvx_decomp_topic = 'CvxDecomp'
         self.cvx_decomp_pub = rospy.Publisher(self.cvx_decomp_topic,CvxDecomp,queue_size=10)
 
         # Parameters
@@ -42,17 +42,19 @@ class local_planner_test_talker:
 
         # 2 point problem
         ic_p = np.array([0,0,3])
+        mid_p = np.array([10,10,3])
+        mid_p2 = np.array([12,12,3])
         bc_p = np.array([20,20,3])
-        self.positions = np.array([ic_p,bc_p])
+        self.positions = np.array([ic_p,mid_p,mid_p2,bc_p])
 
         # Multi point problem
-        self.positions = np.array([[0,0,3],
-                                   [5,0,4],
-                                   [5,2,8],
-                                   [2,10,4],
-                                   [6,10,4],
-                                   [8,8,4],
-                                   [10,10,4]])
+        # self.positions = np.array([[0,0,3],
+        #                            [5,0,4],
+        #                            [5,2,8],
+        #                            [2,10,4],
+        #                            [6,10,4],
+        #                            [8,8,4],
+        #                            [10,10,4]])
 
         # self.positions = np.array([[0,0,3],
         #                            [-5,-5,4],
