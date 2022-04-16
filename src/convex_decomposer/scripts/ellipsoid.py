@@ -56,7 +56,6 @@ def find_ellipsoid(p1,p2,offset_x,obs,inflate_distance):
     C =  np.linalg.norm(p1-p2)/2 * np.identity(3)  
     C[0,0] +=   offset_x
     axes = np.linalg.norm(p1-p2)/2 + np.array([offset_x,0,0])
-    
     if axes[0]>0:
       ratio = axes[1]/axes[2]
       C = C.dot(ratio)
@@ -70,7 +69,6 @@ def find_ellipsoid(p1,p2,offset_x,obs,inflate_distance):
     obs_inflated = []
     obs_preserve = obs
     
-
     for pt in obs:
         p = R.transpose().dot(pt-d)
         obs_check = R.dot(np.array([p[0]-np.sign(p[0]) * inflate_distance,p[1]-np.sign(p[1]) * inflate_distance,p[2]-np.sign(p[2]) * inflate_distance]))+d
