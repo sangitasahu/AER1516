@@ -35,9 +35,9 @@ class pub_path_class(object):
         # Declare Publisher and Subsciber
         
         self.path = '/global_plan'
-        self.path_pub = rospy.Publisher(self.path,Path,queue_size=32) 
+        self.path_pub = rospy.Publisher(self.path,Path,queue_size=1) 
         self.droneloc = '/SQ01s/goal'
-        self.drone_loc_pub = rospy.Publisher(self.droneloc,Goal,queue_size=32) 
+        self.drone_loc_pub = rospy.Publisher(self.droneloc,Goal,queue_size=1) 
         #self.clicked_point_topic = 'clicked_point'
         #self.clicked_point_sub = rospy.Subscriber(self.clicked_point_topic,PointStamped,callback=self.clicked_point_sub_callback)
         self.clicked_point_topic = '/move_base_simple/goal'
@@ -53,7 +53,6 @@ class pub_path_class(object):
         self.timers = rospy.Timer(rospy.Duration(1.0 / self.loop_frequency), self.pub_path_def)
     
     def clicked_point_sub_callback(self,msg):
-        # TODO: May need to consider thread safety
         self.received_point = True
         self.clicked_point = msg
     
