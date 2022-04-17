@@ -47,32 +47,8 @@ Faster::Faster(parameters par) : par_(par)
   jps_manager_.setDroneRadius(par_.drone_radius);
 
   double max_values[3] = { par_.v_max, par_.a_max, par_.j_max };
-
-  /*// Setup of sg_whole_
-  sg_whole_.setN(par_.N_whole);
-  sg_whole_.createVars();
-  sg_whole_.setDC(par_.dc);
-  sg_whole_.setBounds(max_values);
-  sg_whole_.setForceFinalConstraint(true);
-  sg_whole_.setFactorInitialAndFinalAndIncrement(1, 10, par_.increment_whole);
-  sg_whole_.setVerbose(par_.gurobi_verbose);
-  sg_whole_.setThreads(par_.gurobi_threads);
-  sg_whole_.setWMax(par_.w_max);
-
-  // Setup of sg_safe_
-  sg_safe_.setN(par_.N_safe);
-  sg_safe_.createVars();
-  sg_safe_.setDC(par_.dc);
-  sg_safe_.setBounds(max_values);
-  sg_safe_.setForceFinalConstraint(false);
-  sg_safe_.setFactorInitialAndFinalAndIncrement(1, 10, par_.increment_safe);
-  sg_safe_.setVerbose(par_.gurobi_verbose);
-  sg_safe_.setThreads(par_.gurobi_threads);
-  sg_safe_.setWMax(par_.w_max);*/
-
   pclptr_unk_ = pcl::PointCloud<pcl::PointXYZ>::Ptr(new pcl::PointCloud<pcl::PointXYZ>);
   pclptr_map_ = pcl::PointCloud<pcl::PointXYZ>::Ptr(new pcl::PointCloud<pcl::PointXYZ>);
-
   changeDroneStatus(DroneStatus::GOAL_REACHED);
   resetInitialization();
 }
@@ -170,69 +146,33 @@ void Faster::getState(state& data)
   mtx_state.unlock();
 }
 
-
-
-
 void Faster::updateState(state data)
 {
   state_ = data;
-
-  if (state_initialized_ == true)
-  {
-    state tmp;
-    tmp.pos = data.pos;
-    tmp.yaw = data.yaw;
-    plan_.push_back(tmp);
-  }
-
+  state tmp;
+  tmp.pos = data.pos;
+  tmp.yaw = data.yaw;
+  plan_.push_back(tmp);
   state_initialized_ = true;
 }
 
 bool Faster::initializedAllExceptPlanner()
 {
-  if (!state_initialized_ || !kdtree_map_initialized_ || !kdtree_unk_initialized_ || !terminal_goal_initialized_)
-  {
-    //std::cout << "state_initialized_= " << state_initialized_ << std::endl;
-    //std::cout << "kdtree_map_initialized_= " << kdtree_map_initialized_ << std::endl;
-    //std::cout << "kdtree_unk_initialized_= " << kdtree_unk_initialized_ << std::endl;
-    //std::cout << "terminal_goal_initialized_= " << terminal_goal_initialized_ << std::endl;
-    return false;
-  }
   return true;
 }
 
 bool Faster::initialized()
 {
-  if (!state_initialized_ || !kdtree_map_initialized_ || !kdtree_unk_initialized_ || !terminal_goal_initialized_ ||
-      !planner_initialized_)
-  {
-    //std::cout << "state_initialized_= " << state_initialized_ << std::endl;
-    //std::cout << "kdtree_map_initialized_= " << kdtree_map_initialized_ << std::endl;
-    //std::cout << "kdtree_unk_initialized_= " << kdtree_unk_initialized_ << std::endl;
-    //std::cout << "terminal_goal_initialized_= " << terminal_goal_initialized_ << std::endl;
-    //std::cout << "planner_initialized_= " << planner_initialized_ << std::endl;
-    //return false;
-  }
   return true;
 }
 
-void Faster::replan(vec_Vecf<3>& JPS_safe_out, vec_Vecf<3>& JPS_whole_out, vec_E<Polyhedron<3>>& poly_safe_out,
-                    vec_E<Polyhedron<3>>& poly_whole_out, std::vector<state>& X_safe_out,
-                    std::vector<state>& X_whole_out)
+void Faster::replan(vec_Vecf<3>& JPS_whole_out,vec_E<Polyhedron<3>>& poly_whole_out)
 {
   MyTimer replanCB_t(true);
   if (initializedAllExceptPlanner() == false)
   {
     return;
   }
-
-  //sg_whole_.ResetToNormalState();
-  //sg_safe_.ResetToNormalState();
-
-  //////////////////////////////////////////////////////////////////////////
-  ///////////////////////// G <-- Project GTerm ////////////////////////////
-  //////////////////////////////////////////////////////////////////////////
-
   mtx_state.lock();
   mtx_G.lock();
   mtx_G_term.lock();
@@ -256,8 +196,7 @@ void Faster::replan(vec_Vecf<3>& JPS_safe_out, vec_Vecf<3>& JPS_whole_out, vec_E
   // Don't plan if drone is not traveling
   if (drone_status_ == DroneStatus::GOAL_REACHED )// || (drone_status_ == DroneStatus::YAWING))
   {
-    std::cout << "No replanning needed because" << std::endl;
-    print_status();
+    std::cout << "GOAL_REACHED" << std::endl;
     return;
   }
 
@@ -288,7 +227,6 @@ void Faster::replan(vec_Vecf<3>& JPS_safe_out, vec_Vecf<3>& JPS_whole_out, vec_E
     std::cout << bold << red << "JPS didn't find a solution" << std::endl;
     return;
   }
-
   //////////////////////////////////////////////////////////////////////////
   ///////////////////////// Find JPS_in ////////////////////////////////////
   //////////////////////////////////////////////////////////////////////////
@@ -305,124 +243,26 @@ void Faster::replan(vec_Vecf<3>& JPS_safe_out, vec_Vecf<3>& JPS_whole_out, vec_E
   }
   // createMoreVertexes in case dist between vertexes is too big
   createMoreVertexes(JPS_in, par_.dist_max_vertexes);
-
-  //////////////////////////////////////////////////////////////////////////
-  ///////////////// Solve with GUROBI Whole trajectory /////////////////////
-  //////////////////////////////////////////////////////////////////////////
-
-  if (par_.use_faster == true)
-  {
-    vec_Vecf<3> JPS_whole = JPS_in;
-    deleteVertexes(JPS_whole, par_.max_poly_whole);
-    E.pos = JPS_whole[JPS_whole.size() - 1];
-
+  vec_Vecf<3> JPS_whole = JPS_in;
+  deleteVertexes(JPS_whole, par_.max_poly_whole);
+  E.pos = JPS_whole[JPS_whole.size() - 1];
     // Convex Decomp around JPS_whole
-    MyTimer cvx_ellip_decomp_t(true);
-    //std::cout << "path out jps3d:= " << JPS_whole.size() << std::endl;
-    jps_manager_.cvxEllipsoidDecomp(JPS_whole, OCCUPIED_SPACE, l_constraints_whole_, poly_whole_out);
-    //std::cout << "poly_whole_out= " << poly_whole_out.size() << std::endl;
-
-    // Check if G is inside poly_whole
-    bool isGinside_whole = l_constraints_whole_[l_constraints_whole_.size() - 1].inside(G.pos);
-    E.pos = (isGinside_whole == true) ? G.pos : E.pos;
-
-    // Set Initial cond, Final cond, and polytopes for the whole traj
-    //sg_whole_.setX0(A);
-    //sg_whole_.setXf(E);
-    //sg_whole_.setPolytopes(l_constraints_whole_);
-
-    /*    std::cout << "Initial Position is inside= " << l_constraints_whole_[l_constraints_whole_.size() -
-       1].inside(A.pos)
-                  << std::endl;
-        std::cout << "Final Position is inside= " << l_constraints_whole_[l_constraints_whole_.size() - 1].inside(E.pos)
-                  << std::endl;
-    */
-    // Solve with Gurobi
-    //MyTimer whole_gurobi_t(true);
-    //bool solved_whole = sg_whole_.genNewTraj();
-
-    //if (solved_whole == false)
-    //{
-//      std::cout << bold << red << "No solution found for the whole trajectory" << reset << std::endl;
-      //return;
-    //}
-
-    // Get Results
-    //sg_whole_.fillX();
-
-    // Copy for visualization
-    //X_whole_out = sg_whole_.X_temp_;
-    JPS_whole_out = JPS_whole;
-  }
-  else
-  {  // Dummy whole trajectory
-    state dummy;
-    std::vector<state> dummy_vector;
-    dummy_vector.push_back(dummy);
-    //sg_whole_.X_temp_ = dummy_vector;
-  }
-
+  MyTimer cvx_ellip_decomp_t(true);
+  jps_manager_.cvxEllipsoidDecomp(JPS_whole, OCCUPIED_SPACE, l_constraints_whole_, poly_whole_out);
+  // Check if G is inside poly_whole
+  bool isGinside_whole = l_constraints_whole_[l_constraints_whole_.size() - 1].inside(G.pos);
+  E.pos = (isGinside_whole == true) ? G.pos : E.pos;
+  JPS_whole_out = JPS_whole;
   return;
 }
 
-void Faster::resetInitialization()
-{
+void Faster::resetInitialization(){
   planner_initialized_ = false;
   state_initialized_ = false;
   kdtree_map_initialized_ = false;
   kdtree_unk_initialized_ = false;
   terminal_goal_initialized_ = false;
 }
-
-void Faster::yaw(double diff, state& next_goal)
-{
-  saturate(diff, -par_.dc * par_.w_max, par_.dc * par_.w_max);
-  double dyaw_not_filtered;
-
-  dyaw_not_filtered = copysign(1, diff) * par_.w_max;
-
-  dyaw_filtered_ = (1 - par_.alpha_filter_dyaw) * dyaw_not_filtered + par_.alpha_filter_dyaw * dyaw_filtered_;
-  next_goal.dyaw = dyaw_filtered_;
-
-  // std::cout << "Before next_goal.yaw=" << next_goal.yaw << std::endl;
-
-  next_goal.yaw = previous_yaw_ + dyaw_filtered_ * par_.dc;
-  // std::cout << "After next_goal.yaw=" << next_goal.yaw << std::endl;
-}
-
-void Faster::getDesiredYaw(state& next_goal)
-{
-  double diff = 0.0;
-  double desired_yaw = 0.0;
-
-  switch (drone_status_)
-  {
-    case DroneStatus::YAWING:
-      desired_yaw = atan2(G_term_.pos[1] - next_goal.pos[1], G_term_.pos[0] - next_goal.pos[0]);
-      diff = desired_yaw - state_.yaw;
-      // std::cout << "diff1= " << diff << std::endl;
-      break;
-    case DroneStatus::TRAVELING:
-    case DroneStatus::GOAL_SEEN:
-      desired_yaw = atan2(M_.pos[1] - next_goal.pos[1], M_.pos[0] - next_goal.pos[0]);
-      diff = desired_yaw - state_.yaw;
-      break;
-    case DroneStatus::GOAL_REACHED:
-      next_goal.dyaw = 0.0;
-      next_goal.yaw = previous_yaw_;
-      return;
-  }
-
-  angle_wrap(diff);
-  if (fabs(diff) < 0.04 && drone_status_ == DroneStatus::YAWING)
-  {
-    changeDroneStatus(DroneStatus::TRAVELING);
-  }
-  // std::cout << "diff2= " << diff << std::endl;
-  yaw(diff, next_goal);
-  // std::cout << "yaw3= " << next_goal.yaw << std::endl;
-}
-
 
 // Debugging functions
 void Faster::changeDroneStatus(int new_status)
@@ -469,23 +309,4 @@ void Faster::changeDroneStatus(int new_status)
   std::cout << std::endl;
 
   drone_status_ = new_status;
-}
-
-void Faster::print_status()
-{
-  switch (drone_status_)
-  {
-    case DroneStatus::YAWING:
-      //std::cout << bold << "status_=YAWING" << reset << std::endl;
-      break;
-    case DroneStatus::TRAVELING:
-      //std::cout << bold << "status_=TRAVELING" << reset << std::endl;
-      break;
-    case DroneStatus::GOAL_SEEN:
-      //std::cout << bold << "status_=GOAL_SEEN" << reset << std::endl;
-      break;
-    case DroneStatus::GOAL_REACHED:
-      //std::cout << bold << "status_=GOAL_REACHED" << reset << std::endl;
-      break;
-  }
 }

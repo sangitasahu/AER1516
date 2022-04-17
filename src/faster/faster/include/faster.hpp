@@ -54,10 +54,8 @@ class Faster
 {
 public:
   Faster(parameters par);
-  void replan(vec_Vecf<3>& JPS_safe_out, vec_Vecf<3>& JPS_whole_out, vec_E<Polyhedron<3>>& poly_safe_out,
-              vec_E<Polyhedron<3>>& poly_whole_out, std::vector<state>& X_safe_out, std::vector<state>& X_whole_out);
+  void replan(vec_Vecf<3>& JPS_whole_out,vec_E<Polyhedron<3>>& poly_whole_out);
   void updateState(state data);
-
   void updateMap(pcl::PointCloud<pcl::PointXYZ>::Ptr pclptr_map, pcl::PointCloud<pcl::PointXYZ>::Ptr pclptr_unk);
   bool getNextGoal(state& next_goal);
   void getState(state& data);
@@ -76,17 +74,8 @@ private:
 
   JPS_Manager jps_manager_;  // Manager of JPS
 
-  void yaw(double diff, state& next_goal);
-
-  void getDesiredYaw(state& next_goal);
-
   // void yaw(double diff, snapstack_msgs::QuadGoal& quad_goal);
   void createMoreVertexes(vec_Vecf<3>& path, double d);
-
-  int findIndexR(int indexH);
-
-  int findIndexH(bool& needToComputeSafePath);
-  bool ARisInFreeSpace(int index);
 
   void updateInitialCond(int i);
 
@@ -101,14 +90,8 @@ private:
   // map B if JPS was computed using an older map A
   // If type_return==Intersection, it returns the last point in the JPS path that is at least par_.inflation_jps from
   // map
-  Eigen::Vector3d getFirstCollisionJPS(vec_Vecf<3>& path, bool* thereIsIntersection, int map, int type_return);
-
-  bool appendToPlan(int k_end_whole, const std::vector<state>& whole, int k_safe, const std::vector<state>& safe);
-
   bool initialized();
   bool initializedAllExceptPlanner();
-
-  void print_status();
 
   parameters par_;
 
