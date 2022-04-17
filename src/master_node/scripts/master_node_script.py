@@ -59,6 +59,7 @@ class MasterNode(object):
         # 1 - Global planner passthrough (for debugging)
         # 2 - Hold location (for debugging)
         self.path_mode = 0
+        self.clicked_point_mode = 1
         self.global_plan_flight_speed = 1 # m/s
 
         # Rates
@@ -69,17 +70,16 @@ class MasterNode(object):
         self.state_sub = rospy.Subscriber(self.state_topic,State,callback=self.state_sub_callback)
         # self.glob_plan_topic = 'global_plan'
         self.glob_plan_topic = '/SQ01s/faster/global_plan'
-        self.glob_plan_sub = rospy.Subscriber(self.glob_plan_topic,Path,callback=self.glob_plan_sub_callback)
+        # self.glob_plan_sub = rospy.Subscriber(self.glob_plan_topic,Path,callback=self.glob_plan_sub_callback)
         self.local_plan_goal_topic = '/local_planner/local_plan_goal'
         self.local_plan_goal_sub = rospy.Subscriber(self.local_plan_goal_topic,Goal,callback=self.local_plan_sub_callback)
-        self.clicked_point_mode = 1
+
         if self.clicked_point_mode == 0:
             self.clicked_point_topic = '/clicked_point'
+            self.clicked_point_sub = rospy.Subscriber(self.clicked_point_topic,PointStamped,callback=self.clicked_point_sub_callback)
         else:
             self.clicked_point_topic = '/move_base_simple/goal'
-
-        self.clicked_point_topic = '/move_base_simple/goal'
-        self.clicked_point_sub = rospy.Subscriber(self.clicked_point_topic,PoseStamped,callback=self.clicked_point_sub_callback)
+            self.clicked_point_sub = rospy.Subscriber(self.clicked_point_topic,PoseStamped,callback=self.clicked_point_sub_callback)
 
         # Publishers
         self.goal_topic = '/SQ01s/goal'
@@ -98,7 +98,10 @@ class MasterNode(object):
         # Inputs
         self.state = State()
         self.glob_plan = Path()
-        self.clicked_point = PoseStamped()
+        if self.clicked_point_mode == 0:
+            self.clicked_point = PointStamped()
+        else:
+            self.clicked_point = PoseStamped()
         self.local_plan_goal = Goal()
 
         # State variables
@@ -111,6 +114,10 @@ class MasterNode(object):
         self.goal_filt_y = self.start_y
         self.goal_filt_z = self.start_z
         self.goal_filt_yaw = self.start_yaw
+
+        self.clicked_point_last_x = 0
+        self.clicked_point_last_y = 0
+        self.clicked_point_last_yaw = 0
 
         # Filter coefficients
         self.goal_filt_cutoff = 20 # Hz
@@ -302,15 +309,38 @@ class MasterNode(object):
         elif self.node_state == NodeState.FLIGHT_HOLD:
             # Hold position at clicked point
             if self.received_point:
-                goal_new = Goal(header = Header(stamp=rospy.get_rostime(),frame_id = self.frame_id))
-                goal_new.p.x = self.clicked_point.pose.position.x
-                goal_new.p.y = self.clicked_point.pose.position.y
-                goal_new.p.z = self.flight_z
-                quat_clicked = [self.clicked_point.pose.orientation.x,self.clicked_point.pose.orientation.y,
-                            self.clicked_point.pose.orientation.z,self.clicked_point.pose.orientation.w]
-                euler_clicked = euler_from_quaternion(quat_clicked,'rzyx')
-                goal_new.yaw = euler_clicked[0]
-                self.goal_pub.publish(goal_new)
+                if self.clicked_point_mode == 0:
+                    # goal_new = Goal(header = Header(stamp=rospy.get_rostime(),frame_id = self.frame_id))
+                    goal_new = Goal()
+                    goal_new.p.x = self.clicked_point.point.x
+                    goal_new.p.y = self.clicked_point.point.y
+                    goal_new.p.z = self.flight_z
+
+                    dx = self.clicked_point.point.x-self.clicked_point_last_x
+                    dy = self.clicked_point.point.y-self.clicked_point_last_y
+
+                    if abs(dx)<self.yaw_tol and abs(dy)<self.yaw_tol:
+                        goal_new.yaw = self.clicked_point_last_yaw
+                    else:
+                        goal_new.yaw = np.arctan2(dy,dx)
+                    
+                    self.goal_pub.publish(goal_new)
+
+                    self.clicked_point_last_x = goal_new.p.x
+                    self.clicked_point_last_y = goal_new.p.y
+                    self.clicked_point_last_yaw = goal_new.yaw
+                    self.received_point = False
+                else:
+                    goal_new = Goal(header = Header(stamp=rospy.get_rostime(),frame_id = self.frame_id))
+                    goal_new.p.x = self.clicked_point.pose.position.x
+                    goal_new.p.y = self.clicked_point.pose.position.y
+                    goal_new.p.z = self.flight_z
+                    quat_clicked = [self.clicked_point.pose.orientation.x,self.clicked_point.pose.orientation.y,
+                                self.clicked_point.pose.orientation.z,self.clicked_point.pose.orientation.w]
+                    euler_clicked = euler_from_quaternion(quat_clicked,'rzyx')
+                    goal_new.yaw = euler_clicked[0]
+                    self.goal_pub.publish(goal_new)
+                    self.received_point = False
 
         # Update global goal location for global planner
         if self.goal_mode == 0:
