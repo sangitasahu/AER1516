@@ -177,7 +177,7 @@ void Faster::updateState(state data)
 {
   state_ = data;
 
-  if (state_initialized_ == false)
+  if (state_initialized_ == true)
   {
     state tmp;
     tmp.pos = data.pos;
@@ -448,7 +448,7 @@ void Faster::changeDroneStatus(int new_status)
       //std::cout << bold << "status_=GOAL_REACHED" << reset;
       break;
   }
-  std::cout << " to ";
+  //std::cout << " to ";
 
   switch (new_status)
   {

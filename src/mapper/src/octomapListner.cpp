@@ -18,10 +18,15 @@
 #include <tf2/LinearMath/Matrix3x3.h>
 #include <tf2/LinearMath/Quaternion.h>
 #include <tf2/convert.h>
+#include <sensor_msgs/PointCloud2.h>
+#include <sensor_msgs/point_cloud_conversion.h>
    
 ros::Publisher pubProb;
 ros::Publisher pubGrid;
 ros::Publisher pubOccup;
+ros::Publisher pubOccup2;
+ros::Publisher pubProb2;
+
 snapstack_msgs::State quad_state;
 geometry_msgs::TransformStamped tf_cam2world;
 geometry_msgs::Vector3 quad_pos;
@@ -102,9 +107,9 @@ void octomap_binary_callback(const octomap_msgs::OctomapConstPtr& octomap_msg)
     std::shared_ptr<octomap::OcTree> octree = std::shared_ptr<octomap::OcTree> (dynamic_cast<octomap::OcTree*> (octomap_msgs::msgToMap(* octomap_msg)));
 
     int z_scale_factor = 3;
-    float bbx_range = 3.;
+    float bbx_range = 6.;
     float bbx_range_z = bbx_range/z_scale_factor;
-    float resolution = 0.5;
+    float resolution = 0.25;
     //int bsize = static_cast<int>((bbx_upper-bbx_lower)/resolution);
     octomap::point3d  min_bbx;
     min_bbx.x() = round_val(quad_pos.x)-bbx_range/2;
@@ -229,11 +234,7 @@ void octomap_binary_callback(const octomap_msgs::OctomapConstPtr& octomap_msg)
                 Occup3d.push_back(grids3d[grid_index]);
             }
 
-            
-
-
         }
-
 
     }
     
@@ -254,16 +255,29 @@ void octomap_binary_callback(const octomap_msgs::OctomapConstPtr& octomap_msg)
     occupancy_info.header.stamp = ros::Time(0);
     occupancy_info.points = Occup3d;
 
-
-
     sensor_msgs::PointCloud grid_info;
     grid_info.header.frame_id = "vicon";
     grid_info.header.stamp = ros::Time(0);   
     grid_info.points = grids3d;
     grid_info.channels = gridChannels;
 
+    sensor_msgs::PointCloud2 unknown_info2;
+    unknown_info2.header.frame_id = "vicon";
+    unknown_info2.header.stamp = ros::Time(0);   
+    
+    sensor_msgs::PointCloud2 occupancy_info2;
+    occupancy_info2.header.frame_id = "vicon";
+    occupancy_info2.header.stamp = ros::Time(0);   
+
+    sensor_msgs::convertPointCloudToPointCloud2(unknown_info,unknown_info2);
+    sensor_msgs::convertPointCloudToPointCloud2(occupancy_info,occupancy_info2);
+
     pubProb.publish(unknown_info);
     pubOccup.publish(occupancy_info); 
+
+    pubProb2.publish(unknown_info2);
+    pubOccup2.publish(occupancy_info2); 
+
     pubGrid.publish(grid_info);
 
     
@@ -274,7 +288,7 @@ int main(int argc, char **argv)
 {
     ros::init(argc, argv, "octomapListener");
     ros::NodeHandle n;
-    ros::Subscriber sub = n.subscribe("octomap_binary", 1000, octomap_binary_callback);
+    ros::Subscriber sub = n.subscribe("octomap_binary", 10, octomap_binary_callback);
     
     ros::NodeHandle state;
     ros::Subscriber sub_state = state.subscribe("/SQ01s/state", 10, state_callback);  
@@ -285,8 +299,13 @@ int main(int argc, char **argv)
     ros::NodeHandle occupancyProbability; 
     ros::NodeHandle gridNode;
     ros::NodeHandle free;
-    pubProb = occupancyProbability.advertise<sensor_msgs::PointCloud>("unknown_grid",1000);
-    pubGrid = gridNode.advertise<sensor_msgs::PointCloud>("grid_publisher",1000);
-    pubOccup = occupancyProbability.advertise<sensor_msgs::PointCloud>("occup_grid",1000);
+    
+    pubProb = occupancyProbability.advertise<sensor_msgs::PointCloud>("unknown_grid1",1);
+    pubGrid = gridNode.advertise<sensor_msgs::PointCloud>("grid_publisher",1);
+    pubOccup = occupancyProbability.advertise<sensor_msgs::PointCloud>("occup_grid1",1);
+
+    pubOccup2 = occupancyProbability.advertise<sensor_msgs::PointCloud2>("occup_grid",1);
+    pubProb2 = occupancyProbability.advertise<sensor_msgs::PointCloud2>("unknown_grid",1);
+
     ros::spin();    
 }
