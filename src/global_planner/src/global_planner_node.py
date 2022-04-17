@@ -60,24 +60,20 @@ class globalPlanner:
         self.COMPLETED = 1
         self.RUNNING = 0
         self.VALID_PATH = 0
+        self.FIND_ALL_FEASIBLE_MOVES = 1
+        self.FIND_NEXT_MOVE = 0
         #JPS related
         self.MAX_NUM_ITERATIONS = 100
         self.MAX_PATHS_TO_CHECK = 20
+        self.MOVE_IDLE = 12
         #Moves      
         #Moves one cell ahead        
-        self.STRAIGHT_MOVES_1 = [13,9,15,21,3] 
-        self.DIAGONAL1_MOVES_1 = [10,16,18,0,22,4,24,6]
-        self.DIAGONAL2_MOVES_1 = [19,1,25,7] 
+        self.MOVES_1 = [13,17,7,18,8,16,6,11]
+        #Move up or down
+        self.MOVES_z = [25,26,27,28]
         #Moves two cells ahead for robust collision avoidance
-        self.STRAIGHT_MOVES_2 = [14,33,34,35,36]  
-        self.DIAGONAL1_MOVES_2 = [37,38,45,46,39,40,47,48]
-        self.DIAGONAL2_MOVES_2 = [41,42,43,44] 
+        self.MOVES_2 = [14,22,2,24,4,20,0,10]
         #Select moves for obstacle detection
-        #self.MOVES_2 =   self.STRAIGHT_MOVES_2  + self.DIAGONAL1_MOVES_2 + self.DIAGONAL2_MOVES_2            
-        #self.MOVES_1 = self.STRAIGHT_MOVES_1  + self.DIAGONAL1_MOVES_1 + self.DIAGONAL2_MOVES_1 
-        #Moves order in priority
-        self.MOVES_1 = [13,9,15,10,16,22,4,19,25,1,7,18,24,0,6,21,3]
-        self.MOVES_2 = [14,33,34,37,38,39,40,41,43,42,44,45,47,46,48,35,36]
         self.MOVES = self.MOVES_2
 
         """#Variables"""
@@ -98,10 +94,10 @@ class globalPlanner:
         #JPS related 
         self.nxt_move_num = 0 #Move number
         self.num_of_cells = 0
-        self.cur_goal = [0,0,0]      
+        self.cur_goal = [20,20,3]      
         self.proj_cur_goal = [0,0,0]
         self.cur_state = [0,0,0]
-        self.path_nodes_list = []
+        self.path_nodes_list = [[2,2,3]]
         self.cur_state_in_grid = [0,0,0]
         self.visited_nodes_list =[0,0,0]  
         self.paths = {}
@@ -111,7 +107,7 @@ class globalPlanner:
         self.all_paths_analysed = False
         self.run_num = 0
         self.reached_cur_goal = False
-        self.old_move = 12
+        self.old_move = self.MOVE_IDLE
 
         #Control flags and counters
         self.seq_cntr = 0
@@ -129,78 +125,50 @@ class globalPlanner:
         #Publishers related
         self.global_path_pub = rospy.Publisher('global_plan', Path, queue_size=100)
         self.goal_pub = rospy.Publisher('/SQ01s/goal', Goal, queue_size=100)
+        self.proj_goal_pub = rospy.Publisher('/projected_goal', PointStamped, queue_size=10)																				
 
         #Dictionaries
         self.coord_offset_dict = {
-        0  : [0, -1, -1] ,
-        1  : [1, -1, -1] ,
-        2  : [2, -1, -1] ,
-        3  : [0, 0, -1] ,
-        4  : [1, 0, -1] ,
-        5  : [2, 0, -1] ,
-        6  : [0, 1, -1] ,
-        7  : [1, 1, -1] ,
-        8  : [2, 1, -1] ,
-        9  : [0, -1, 0] ,
-        10  : [1, -1, 0] ,
-        11  : [2, -1, 0] ,
-        12  : [0, 0, 0] ,
-        13  : [1, 0, 0] ,
-        14  : [2, 0, 0] ,
-        15  : [0, 1, 0] ,
-        16  : [1, 1, 0] ,
-        17  : [2, 1, 0] ,
-        18  : [0, -1, 1] ,
-        19  : [1, -1, 1] ,
-        20  : [2, -1, 1] ,
-        21  : [0, 0, 1] ,
-        22  : [1, 0, 1] ,
-        23  : [2, 0, 1] ,
-        24  : [0, 1, 1] ,
-        25  : [1, 1, 1] ,
-        26  : [2, 1, 1] ,
-        27  : [0,-1,2],
-        28  : [0, 1, 2],
-        29  : [0,-1, -2],
-        30  : [0, 1,-2],
-        31  : [1,2,0],
-        32  : [1,-2,0],
-        33  : [0,-2,0],
-        34  : [0,2,0],
-        35  : [0,0,2],
-        36  : [0,0,-2],
-        37  : [2,-2,0],
-        38  : [2,2,0],
-        39  : [2,0,2],
-        40  : [2,0,-2],
-        41  : [2,-2,2],
-        42  : [2,-2,-2],
-        43  : [2,2,2],
-        44  : [2,2,-2],
-        45  : [0,-2,2],
-        46  : [0,-2,-2],
-        47  :  [0,2,2],
-        48  : [0,2,-2] 
+          0 : [ -2 , -2 , 0 ],
+          1 : [ -1 , -2 , 0 ],
+          2 : [ 0 , -2 , 0 ],
+          3 : [ 1 , -2 , 0 ],
+          4 : [ 2 , -2 , 0 ],
+          5 : [ -2 , -1 , 0 ],
+          6 : [ -1 , -1 , 0 ],
+          7 : [ 0 , -1 , 0 ],
+          8 : [ 1 , -1 , 0 ],
+          9 : [ 2 , -1 , 0 ],
+          10 : [ -2 , 0 , 0 ],
+          11 : [ -1 , 0 , 0 ],
+          12 : [ 0 , 0 , 0 ],
+          13 : [ 1 , 0 , 0 ],
+          14 : [ 2 , 0 , 0 ],
+          15 : [ -2 , 1 , 0 ],
+          16 : [ -1 , 1 , 0 ],
+          17 : [ 0 , 1 , 0 ],
+          18 : [ 1 , 1 , 0 ],
+          19 : [ 2 , 1 , 0 ],
+          20 : [ -2 , 2 , 0 ],
+          21 : [ -1 , 2 , 0 ],
+          22 : [ 0 , 2 , 0 ],
+          23 : [ 1 , 2 , 0 ],
+          24 : [ 2 , 2 , 0 ],
+          25 : [0 , 0 , 1 ],
+          26 : [0 , 0 , 2 ],
+          27 : [0 , 0 , -1 ],
+          28 : [0 , 0 , -2 ],
         }
 
         self.neighbor_offsets_dict = {
-          13 : [10,11,16,17],
-          21 : [18,27,24,28],
-          3  : [0,29,6,30],
-          15 : [16,31],
-          9  : [10,32],
-          10 : [13,14,9,33],
-          16 : [13,14,15,34],
-          18 : [9,33,21,35],
-          0  : [9,33,3,36],
-          24 : [15,34,21,35],
-          6  : [15,34,3,36],
-          22 : [13,14,21,35],
-          4  : [13,14,3,36],
-          19 : [13,14,9,33,21,35],
-          1  : [13,14,9,33,3,36],
-          25 : [13,14,15,34,21,35],
-          7  : [13,14,15,34,3,36],
+          13 : ([18,19,8,9],[23,3]),
+          17 : ([16,21,18,23],[15,19]),
+          7 : ([6,1,8,3],[5,9]),
+          18 : ([17,22,13,14],[16,8]),
+          8 : ([7,2,13,14],[6,18]),
+          16 : ([17,22,11,10],[18,6]),
+          6 : ([7,2,11,10],[8,16]),
+          11 : ([16,15,6,5],[21,1]),          
           12 : [12,12] }
           
 
@@ -224,6 +192,7 @@ class globalPlanner:
         self.num_of_cells = len(self.occupancy_sts.values) 
         #print("New map!")                     
         if len(pointClouds.points) == self.NUM_OF_CELLS: 
+          #print("Empty : ", self.occupancy_sts.values.count(0), "Unknown: " ,self.occupancy_sts.values.count(-1), "Occupied : ", self.occupancy_sts.values.count(1), "Total : ", len(self.occupancy_sts.values))
           self.map_invalid = False 
           start_state = pointClouds.points[self.ORIGIN_CELL_NUM]
           self.x_range = [start_state.x , start_state.x + self.BB_WIDTH/2 ]
@@ -238,7 +207,8 @@ class globalPlanner:
 
     """###Calculate the next state"""
     def get_next_state(self):
-      if not self.goal_reached and not self.map_invalid and self.jps_run_sts == self.COMPLETED and len(self.occupancy_sts.values) == self.NUM_OF_CELLS:
+      if not self.map_invalid and self.jps_run_sts == self.COMPLETED and len(self.occupancy_sts.values) == self.NUM_OF_CELLS:
+        # not self.goal_reached and 
         start_time_jps = time.time()
         self.jps_run_sts = self.RUNNING
         #Store a copy of the variables
@@ -247,7 +217,7 @@ class globalPlanner:
         #Initialise
         self.path_nodes_list = [self.cur_state]
         #Get the projected goals in unknown space and known free space
-        print("Initial state :", self.cur_state, self.cur_state_in_grid, self.cur_goal)
+        print("Actual state :", self.cur_state, "Current state from mapper :", self.cur_state_in_grid, "Goal Location :" ,self.cur_goal)
         #Goal is behind the drone
         if self.goal_is_behind(self.cur_state_in_grid,self.cur_goal):
           self.get_projected_goal()
@@ -255,25 +225,20 @@ class globalPlanner:
         else: #Calculate JPS path
           self.get_projected_goal()
           if self.goal_is_reachable:          
-            next_states = self.find_jps_path()          
-            val_sts, last_index = self.is_path_valid(next_states)
-            if self.debug_en :
-              print("Final path found : ", next_states)
-            if val_sts==self.NOT_OCCUPIED:
+            next_states = self.find_jps_path()  
+            if self.debug_en == False:
+              print("Global path found by JPS! " )        
+            val_sts = self.is_path_valid(next_states)
+            if val_sts == self.VALID_PATH:
               for node in next_states:
                 self.path_nodes_list.append(node)
-            elif val_sts==self.UNKNOWN:
-              for i in range(0,last_index):
-                self.path_nodes_list.append(next_states[i])
-          else:
-            self.path_nodes_list.append(self.proj_cur_goal)
+          self.path_nodes_list.append(self.proj_cur_goal)
         #Publish the global plan
         self.publish_global_plan()
         #If end goal is reached
         if self.has_reached_goal(self.path_nodes_list[-1],self.cur_goal):
             self.goal_reached = True
             print("---------------------Reached end goal!----------------------")
-            self.visited_nodes_list = []
         elif not self.goal_is_reachable:
             self.goal_reached = True
             print("-------------------End goal is unreachable!---------------------")
@@ -284,6 +249,7 @@ class globalPlanner:
         if self.debug_en :
           print("Time taken by JPS is ", end_time_jps - start_time_jps)
         self.jps_run_sts = self.COMPLETED
+        self.visited_nodes_list = []							
 
     """###Get projected goal for current JPS iteration"""
     def get_projected_goal(self):
@@ -305,63 +271,66 @@ class globalPlanner:
       else:
         behind_goal = self.goal_is_behind(self.cur_state_in_grid,self.cur_goal)
         if (goal_within_bbx and goal_in_unknown) :
-          find_goal_in_known = True
           self.goal_is_reachable = True
+          occ_sts = self.NOT_OCCUPIED
           print("Goal within the bounding box but is in unknown space!")
         elif behind_goal :
           self.goal_is_reachable = False
-          find_goal_in_known = False
+          occ_sts = self.UNKNOWN
           print("Goal in the unknown space behind the drone!")
         else:
-          find_goal_in_known = True
           self.goal_is_reachable = True
+          occ_sts = self.NOT_OCCUPIED
 
         not_occupied_cells = []
         #Get the nearest unknown node to the goal
         for i in range(0, self.num_of_cells):
           cur_point = [self.map_points.points[i].x, self.map_points.points[i].y, self.map_points.points[i].z]
-          if self.occupancy_sts.values[i] == self.UNKNOWN:
+          if self.occupancy_sts.values[i] == occ_sts and (cur_point[2]==self.cur_goal[2]):
             d_goal = self.calc_dist_btw_nodes(cur_point, self.cur_goal,self.EUCLIDEAN_DIST)
             if d_goal <= min_d_goal:
               min_d_goal = d_goal
-              self.unk_cur_goal = cur_point
+              self.proj_cur_goal = cur_point
           elif self.occupancy_sts.values[i] == self.NOT_OCCUPIED and not behind_goal:
             not_occupied_cells.append(cur_point)
 
-        #Get the nearest known node to the unknown node closest to the goal      
-        if find_goal_in_known:
-          min_d_goal = self.INFINITY
-          for node in not_occupied_cells:
-            d_goal = self.calc_dist_btw_nodes(node, self.unk_cur_goal, self.EUCLIDEAN_DIST)
-            if d_goal <= min_d_goal:
-              min_d_goal = d_goal
-              self.proj_cur_goal = node
-    
+        self.unk_cur_goal = self.proj_cur_goal 
+
       self.end_p = time.time()
-      print("Time to read through the map : ", self.end_p - self.start_p)
-      print("Unknown and Known projected goals are " , self.unk_cur_goal ,self.proj_cur_goal)
+      if self.debug_en:
+        print("Time to read through the map : ", self.end_p - self.start_p)
+        print("Unknown and Known projected goals are " , self.unk_cur_goal ,self.proj_cur_goal)
 
     """###Find paths"""
     def find_jps_path(self):
       best_path = [self.cur_state_in_grid]
+      
+      #Set the height first
+      if self.cur_goal[2] - self.cur_state_in_grid[2] != 0: 
+        best_path.append([self.cur_state_in_grid[0],self.cur_state_in_grid[1],self.cur_goal[2]] )
+        self.cur_state_in_grid = best_path[-1]
+
+      #Iterate over different moves and save the path with minimum cost
       min_cost = self.INFINITY
-      best_move, feasible_moves = self.select_moves(self.cur_state_in_grid,1)
-      if self.debug_en :
+      self.cur_best_path_cost = self.INFINITY
+      best_move, feasible_moves = self.select_moves(self.cur_state_in_grid,self.FIND_ALL_FEASIBLE_MOVES)
+      if self.debug_en:
         print("Feasible moves =", feasible_moves)
       for move in feasible_moves:
-        if self.debug_en :
-          print("Current move =", move)
-        self.nxt_move_num = move
+        self.cur_move_num = move
+        if self.debug_en:
+          print("Current move =", move)        
         path, cost = self.get_jps_successors()
         if len(path) != 0 and cost < min_cost:
           best_path = path
           min_cost = cost
+
       return best_path
+
 
     """###Calculate jps jump nodes"""
     def get_jps_successors(self):
-      if self.debug_en:
-        print("Current Positions = ", self.cur_state_in_grid, self.cur_state)
+      #Initialise JPS
       self.visited_nodes_list = []
       self.num_iteration = 0      
       self.paths = {}
@@ -371,22 +340,23 @@ class globalPlanner:
       self.all_paths_analysed = False
       self.run_num = self.num_of_paths_to_check
       self.reached_cur_goal = False
-      self.old_move = 13
+      self.old_move = self.MOVE_IDLE
       cur_grid_node = self.cur_state_in_grid
       possible_paths_dict ={}     
       cur_path_cost = 0
       cur_path = [] 
       valid_path_costs =[]  
-        
+      self.nxt_move_num = self.cur_move_num  
       
+      #Find all possible paths
       while self.num_of_paths_to_check - self.num_of_paths_checked > 0 :
         if self.debug_en : 
           print("----------------Run no:", self.run_num) 
         nxt_state =  self.get_coordinates(self.nxt_move_num, cur_grid_node)           
-        if self.debug_en:
+        if self.debug_en :
           print("Next state = ", nxt_state,self.is_reachable(nxt_state), self.is_occupied(nxt_state))
           print("Move_num = ", self.nxt_move_num)
-        if self.is_reachable(nxt_state) and self.nxt_move_num != 12:          
+        if self.is_reachable(nxt_state) and self.nxt_move_num != self.MOVE_IDLE:          
           next_nodes , next_costs = self.get_neighbours(self.nxt_move_num, cur_grid_node)
           if self.debug_en:
             print("Next nodes = ", next_nodes,self.reached_cur_goal)
@@ -396,21 +366,25 @@ class globalPlanner:
               if self.debug_en:
                 print("Number of forced neighbours =", len(next_nodes)-1,nxt_state, self.nxt_move_num, next_nodes)
               for i in range(0,len(next_nodes)):
-                if i==0:
-                  cur_grid_node = next_nodes[i]
-                  cur_path_cost += next_costs[i]
-                  if self.old_move == self.nxt_move_num and self.old_move != 12 and len(next_nodes)==1 and len(cur_path) > 1:                  
-                    cur_path[-1] = cur_grid_node
+                if self.is_reachable(next_nodes[i]):
+                  if i==0:
+                    cur_grid_node = next_nodes[i]
+                    cur_path_cost += next_costs[i]
+                    if cur_path_cost > self.cur_best_path_cost:
+                      self.num_iteration = self.MAX_NUM_ITERATIONS
+                    else:
+                      if self.old_move == self.nxt_move_num and self.old_move != self.MOVE_IDLE and len(next_nodes)==1 and len(cur_path) > 1:                  
+                        cur_path[-1] = cur_grid_node
+                      else:
+                        cur_path.append(cur_grid_node)                               
                   else:
-                    cur_path.append(cur_grid_node)                               
-                else:
-                  cost_of_cur_grid = self.calc_node_cost(next_nodes[i]) 
-                  self.num_of_paths_to_check += 1 
-                  updated_cur_path = list(cur_path) 
-                  del updated_cur_path[-1]
-                  updated_cur_path.append(next_nodes[i])
-                  self.paths[self.num_of_paths_to_check] =   updated_cur_path  
-                  self.costs[self.num_of_paths_to_check] = cur_path_cost+cost_of_cur_grid
+                    cost_of_cur_grid = self.calc_node_cost(next_nodes[i]) 
+                    self.num_of_paths_to_check += 1 
+                    updated_cur_path = list(cur_path) 
+                    del updated_cur_path[-1]
+                    updated_cur_path.append(next_nodes[i])
+                    self.paths[self.num_of_paths_to_check] =   updated_cur_path  
+                    self.costs[self.num_of_paths_to_check] = cur_path_cost+cost_of_cur_grid
               if self.debug_en:
                 print(cur_path, updated_cur_path)
                 print("Paths N Costs" , self.paths, self.costs)
@@ -425,22 +399,24 @@ class globalPlanner:
                 cur_path, cur_grid_node, cur_path_cost,break_sts  = self.init_nxt_search()
                 if break_sts:
                   break
-              if self.num_iteration == 100:
-                break
           else:
             self.init_cond_flag = self.PROJ_GOAL_REACHED
 
-            if self.old_move == self.nxt_move_num and self.old_move != 12:                  
+            if self.old_move == self.nxt_move_num and self.old_move != self.MOVE_IDLE and len(cur_path) >0:                  
               cur_path[-1] = self.proj_cur_goal
             else:
               cur_path.append(self.proj_cur_goal)
             self.visited_nodes_list.append(self.proj_cur_goal)
             valid_path_costs.append(cur_path_cost) 
-            possible_paths_dict[cur_path_cost] = list(cur_path)        
-            
+            val_sts = self.is_path_valid(cur_path)
+            if val_sts == self.VALID_PATH and len(cur_path) > 0:              
+              possible_paths_dict[cur_path_cost] = list(cur_path) 
+            if cur_path_cost < self.cur_best_path_cost :
+              self.cur_best_path_cost  = cur_path_cost            
             if self.debug_en:
               print("Projected goal reached!")
-              #print(self.cur_state,self.cur_state_in_grid,self.proj_cur_goal,self.is_path_valid(cur_path),cur_path)
+              print(self.cur_state,self.cur_state_in_grid,self.proj_cur_goal,cur_path,cur_path_cost)
+              print("Number of paths checked :",self.num_of_paths_checked + 1)
             cur_path, cur_grid_node, cur_path_cost,break_sts = self.init_nxt_search()
             if break_sts:
               break
@@ -451,8 +427,16 @@ class globalPlanner:
           if break_sts:
               break
         self.old_move = self.nxt_move_num
-        self.nxt_move_num , moves = self.select_moves(cur_grid_node,0)  
-              
+        self.nxt_move_num , moves = self.select_moves(cur_grid_node,self.FIND_NEXT_MOVE)  
+		    
+        #Debug publish code
+        if self.debug_en:         
+          if self.init_cond_flag == self.PROJ_GOAL_REACHED:
+            self.path_nodes_list =[]
+            for node in cur_path:
+              self.path_nodes_list.append(node)
+            self.publish_global_plan()
+          
       if self.debug_en:
         print("Possible paths =",possible_paths_dict)
 
@@ -478,33 +462,27 @@ class globalPlanner:
     """###Select the Best Move"""
     def select_moves(self, cur_state,mode):
       min_dist = self.INFINITY
-      best_move = 12
+      best_move = self.MOVE_IDLE
       mov_idx = 0
       feasible_moves = []
       old_dz = self.INFINITY
-      #Check whether previous move still possible
-      if mode==0 and self.old_move != 12:      
-        next_node = self.get_coordinates(self.old_move, cur_state)
-        next_next_node = self.get_coordinates(self.MOVES_2[self.MOVES_1.index(self.old_move )], cur_state)
-        old_dz = next_node[2] - cur_state[2]
-        if self.is_reachable(next_node) == True and self.has_visited(next_node) == False and self.is_reachable(next_next_node) == True and self.has_visited(next_next_node) == False and old_dz < self.RESOLUTION:  
-          return self.old_move, feasible_moves
+
       #Check all moves    
       for mov_idx in range(0, len(self.MOVES)):
         next_node = self.get_coordinates(self.MOVES_1[mov_idx], cur_state)
         next_next_node = self.get_coordinates(self.MOVES_2[mov_idx], cur_state)
         old_dz = next_node[2] - cur_state[2]
         if self.debug_en:
-          print(self.MOVES_1[mov_idx],cur_state,next_node,self.is_reachable(next_node),self.is_occupied(next_node),self.has_visited(next_node),next_next_node,self.is_reachable(next_next_node),self.has_visited(next_next_node),self.is_occupied(next_next_node),self.calc_dist_btw_nodes(next_node, self.proj_cur_goal, self.EUCLIDEAN_DIST))
+          print(self.MOVES_1[mov_idx],cur_state,next_node,self.is_reachable(next_node),self.is_occupied(next_node),self.has_visited(next_node),next_next_node,self.is_reachable(next_next_node),self.has_visited(next_next_node),self.is_occupied(next_next_node),self.calc_dist_btw_nodes(next_node, self.proj_cur_goal, self.MANHATTAN_DIST))
         if self.is_reachable(next_node) == True and self.has_visited(next_node) == False and self.is_reachable(next_next_node) == True and self.has_visited(next_next_node) == False and old_dz < 2*self.RESOLUTION:
-          dist = self.calc_dist_btw_nodes(next_node, self.proj_cur_goal, self.EUCLIDEAN_DIST)
+          dist = self.calc_dist_btw_nodes(next_node, self.proj_cur_goal, self.MANHATTAN_DIST)
           if dist < min_dist:
             min_dist = dist
             best_move = self.MOVES_1[mov_idx]
             feasible_moves.insert(0,self.MOVES_1[mov_idx])
           else:
             feasible_moves.append(self.MOVES_1[mov_idx])
-      if self.debug_en: 
+      if self.debug_en : 
         print("Best move =", best_move )
       return best_move, feasible_moves
     
@@ -516,7 +494,8 @@ class globalPlanner:
       neigh_nodes_sts =[]
      
       #Evaluate neighbours
-      neighbours_to_chk = self.neighbor_offsets_dict[nxt_move_num]
+      neighbours_to_chk = self.neighbor_offsets_dict[nxt_move_num][0]
+      next_neighbours_to_chk = self.neighbor_offsets_dict[nxt_move_num][1]
       if self.debug_en:
         print("Neigh to chk",neighbours_to_chk )
       num_of_neighbors = len(neighbours_to_chk)
@@ -525,7 +504,7 @@ class globalPlanner:
         if self.debug_en:
           print(nxt_move_num,neigh_node_idx,cur_state,neigh_node_coord,self.has_reached_goal(neigh_node_coord,self.proj_cur_goal))
         neigh_nodes.append(neigh_node_coord)
-        neigh_nodes_sts.append(self.is_reachable_neighbour(neighbours_to_chk.index(neigh_node_idx),cur_state,neigh_node_coord))
+        neigh_nodes_sts.append(self.is_reachable_neighbour(neighbours_to_chk.index(neigh_node_idx),cur_state,neigh_node_coord,next_neighbours_to_chk))
         if self.has_reached_goal(neigh_node_coord,self.proj_cur_goal):
           self.reached_cur_goal = True
           next_neighbours.append(neigh_node_coord)
@@ -541,26 +520,14 @@ class globalPlanner:
         if neigh_nodes_sts[1] == self.OCCUPIED and neigh_nodes_sts[0] == self.NOT_OCCUPIED :
           next_neighbours.append(neigh_nodes[0])
           next_costs.append(self.calc_node_cost(neigh_nodes[0]) + self.calc_dist_btw_nodes(cur_state,neigh_nodes[0],self.EUCLIDEAN_DIST))
-      elif num_of_neighbors == 4:
+      else:
         if neigh_nodes_sts[1] == self.OCCUPIED and neigh_nodes_sts[0] == self.NOT_OCCUPIED :
           next_neighbours.append(neigh_nodes[0])
           next_costs.append(self.calc_node_cost(neigh_nodes[0]) + self.calc_dist_btw_nodes(cur_state,neigh_nodes[0],self.EUCLIDEAN_DIST))
         if neigh_nodes_sts[3] == self.OCCUPIED and neigh_nodes_sts[2] == self.NOT_OCCUPIED :
           next_neighbours.append(neigh_nodes[2])
           next_costs.append(self.calc_node_cost(neigh_nodes[2])+ self.calc_dist_btw_nodes(cur_state,neigh_nodes[2],self.EUCLIDEAN_DIST))
-      else: #if six neighbours
-        if (neigh_nodes_sts[1] == self.OCCUPIED) and (neigh_nodes_sts[0] == self.NOT_OCCUPIED) :
-          next_neighbours.append(neigh_nodes[0])
-          next_costs.append(self.calc_node_cost(neigh_nodes[0]) + self.calc_dist_btw_nodes(cur_state,neigh_nodes[0],self.EUCLIDEAN_DIST))
-        if (neigh_nodes_sts[3] == self.OCCUPIED) and (neigh_nodes_sts[2] == self.NOT_OCCUPIED) :
-          next_neighbours.append(neigh_nodes[2])
-          next_costs.append(self.calc_node_cost(neigh_nodes[2])+ self.calc_dist_btw_nodes(cur_state,neigh_nodes[2],self.EUCLIDEAN_DIST))
-        if (neigh_nodes_sts[5] == self.OCCUPIED )and (neigh_nodes_sts[4] == self.NOT_OCCUPIED) :
-          next_neighbours.append(neigh_nodes[4])
-          next_costs.append(self.calc_node_cost(neigh_nodes[4])+ self.calc_dist_btw_nodes(cur_state,neigh_nodes[4],self.EUCLIDEAN_DIST))
 
-      if len(next_neighbours) > 1 and self.debug_en:
-        print("Neighbors =", next_neighbours)
       return next_neighbours, next_costs
 
     """###Initialise the next JPS search"""    
@@ -586,8 +553,8 @@ class globalPlanner:
         break_sts = True
         self.all_paths_analysed = True
       else:
-        #Initialise
-        self.old_move = 12
+        #Initialise for next search
+        self.old_move = self.MOVE_IDLE
         self.num_iteration = 0
         
         #Get paths and costs
@@ -609,9 +576,11 @@ class globalPlanner:
           cur_path = list(self.paths[nxt_paths[0]])
           if cur_path != None:
             cur_grid_node = cur_path[-1]
-            cur_path_cost = self.costs[nxt_costs[0]]                 
-          self.run_num += 1
-          self.visited_nodes_list = []
+            cur_path_cost = self.costs[nxt_costs[0]]
+            self.visited_nodes_list = []
+            for node in cur_path:
+              self.visited_nodes_list.append(node)                 
+          self.run_num += 1          
           
       #Clear goal reached flag
       self.reached_cur_goal = False
@@ -659,7 +628,6 @@ class globalPlanner:
       if num > self.NUM_OF_CELLS and self.debug_en:
         print( "Node ", node , "Offset =", num , " is out of the bounding box with", self.NUM_OF_CELLS, " cells." "i,j,k =",i,j,k)
         print("Current state =", self.cur_state_in_grid)
-
       return num
       
     """###Convert offsets back to coordinates"""
@@ -671,38 +639,28 @@ class globalPlanner:
       return off_position
 
     """###Check if reachable next neighbour"""
-    def is_reachable_neighbour(self,move_idx,cur_node,neigh_node):
-      if move_idx == 1 or move_idx == 3 or move_idx ==5:
+    def is_reachable_neighbour(self,move_idx,cur_node,neigh_node,next_neighbours):
+      if move_idx == 1 or move_idx == 3 :
         return self.is_reachable(neigh_node)
       else:
         if self.is_reachable(neigh_node):
-          next_nodes_to_check =[]
-          diff = [neigh_node[0]-cur_node[0], neigh_node[1]-cur_node[1], neigh_node[2]-cur_node[2] ]
-          for i in range(0,3):
-            next_node = neigh_node
-            if diff[i] == 1 :
-              next_node[i] = next_node[i] + 1*self.RESOLUTION
-            elif diff[i] == -1 :
-              next_node[i] = next_node[i] - 1*self.RESOLUTION
-            next_nodes_to_check.append(next_node)
-          if len(next_nodes_to_check) > 0:
-            for node in next_nodes_to_check:
-              if self.is_reachable(node) == False:
-                return False
-          return True
-        else: 
-          return False
+          next_node_idx = next_neighbours[int((move_idx)/2)]
+          offset = self.coord_offset_dict[next_node_idx]
+          next_next_node = [cur_node[0]+self.RESOLUTION*offset[0],cur_node[1]+self.RESOLUTION*offset[1],cur_node[2]+self.RESOLUTION*offset[2]]				
+          if self.is_reachable(next_next_node):
+            return True 
+        return False
 
     """###Check path is in free known space"""
     def is_path_valid(self, path):
       for node in path:      
         if self.is_occupied(node) == self.OCCUPIED:
           print("Occupied found at ", node)
-          return self.OCCUPIED, 0
+          return self.OCCUPIED
         elif self.is_occupied(node) == self.UNKNOWN:
-          #print("Unknown found at ", node)
-          return self.UNKNOWN, path.index(node)
-      return self.NOT_OCCUPIED, len(path)
+          print("Unknown found at ", node)
+          return self.UNKNOWN
+      return self.NOT_OCCUPIED
 
     """###Check Occupancy status"""
     def is_occupied(self,node):
@@ -724,6 +682,8 @@ class globalPlanner:
       if self.is_occupied(node) == self.NOT_OCCUPIED:
         if (self.z_range[0] <= node[2] <= self.z_range[1]) and (self.y_range[0] <= node[1] <= self.y_range[1]) and (self.x_range[0] <= node[0] <= self.x_range[1]):
           reachable_sts = True
+      #if node == [6.0, 4.0, 2.0] :
+        #print("Not Reachable point : [6.0, 4.0, 2.0]",self.is_occupied(node))
       return reachable_sts
         
     """###Check whether a node is already visited"""
@@ -731,6 +691,16 @@ class globalPlanner:
       if self.visited_nodes_list.count(new_node) > 0:
         return True
       return False
+    
+    """###Check whether next node is feasible"""
+    def is_feasible_node(self,node,goal):
+      if node == [5.0, 2.5, 3.0]:
+        print(node,goal)
+      if node[0]>goal[0] or (node[1]>0 and node[1]>goal[1])  or (node[1]<0 and node[1]<goal[1]) or (node[2]>0 and node[2]>goal[2])  or (node[2]<0 and node[2]<goal[2]) :
+           return False
+      if node == [5.0, 2.5, 3.0]:
+        print(True)
+      return True					
 
     """###Check whether goal is inside Bounding Box"""
     def goal_within_bbx(self,goal_node, cur_node):
@@ -758,16 +728,18 @@ class globalPlanner:
   
     """#Publish the Path"""
 
-    def publish_global_plan(self):
+    def publish_global_plan(self):      
       self.seq_cntr += 1            
       self.header.seq = self.seq_cntr
       self.header.stamp = rospy.Time.now()
       self.header.frame_id = 'world'
-      self.global_nodes_path = Path()	    
+      self.global_nodes_path = Path()    
       pose_list = []
       i = 0
-      if self.debug_en == False:
+      if self.debug_en :
         print("Global plan published : ", self.path_nodes_list)
+
+      #Fill global plan buffer
       for path_node in self.path_nodes_list:
         node_pose = PoseStamped()       
         node_pose.pose.position.x = path_node[0]
@@ -782,28 +754,68 @@ class globalPlanner:
         node_pose.header.frame_id = 'world'
         pose_list.append(node_pose)
         i += 1
+
+      #Publish global plan
       self.global_nodes_path.header= self.header
       self.global_nodes_path.poses = pose_list
       self.global_path_pub.publish(self.global_nodes_path)
+      
+      #Publish projected and unknown goals
+      proj_goal_point = PointStamped()
+      proj_goal_point.point.x = self.proj_cur_goal[0]
+      proj_goal_point.point.y = self.proj_cur_goal[1]
+      proj_goal_point.point.z = self.proj_cur_goal[2]
+      proj_goal_point.header = self.header
+      self.proj_goal_pub.publish(proj_goal_point)
+
+      #Total JPS time							 
       self.end = time.time()
       if self.debug_en:
         rospy.loginfo(self.end -  self.start)
+
+    """#Publish the Goal"""
+    def publish_sim_path(self):
+      self.seq_cntr += 1 
+                 
+      self.header.seq = self.seq_cntr
+      self.header.stamp = rospy.Time.now()
+      self.header.frame_id = 'world'
+      self.nxt_goal.header = self.header   
+
+      if len(self.path_nodes_list) > 1:
+        path_node = self.path_nodes_list[1]
+      else:
+        path_node = self.path_nodes_list[0]
+      
+      self.nxt_goal.p.x = path_node[0]
+      self.nxt_goal.p.y = path_node[1]
+      self.nxt_goal.p.z = path_node[2]
+      self.nxt_goal.v.x = 2.5
+
+      dy = path_node[1]-self.cur_state[1]
+      dx = path_node[0]-self.cur_state[0]	
+      self.nxt_goal.yaw = math.atan2(dy,dx)       
+
+      self.goal_pub.publish(self.nxt_goal)
 
 
 """#Main module"""
 
 if __name__ == '__main__':
     rospy.init_node('globalPlanner')
-    pub_rate = rospy.Rate(20) #20 Hz
+    pub_rate = rospy.Rate(2) #20 Hz
     try:
         globalPlanner_o = globalPlanner()
         #Subscribers        
         rospy.Subscriber("goal_loc", PointStamped, globalPlanner_o.read_goal)
         rospy.Subscriber("/SQ01s/state" , State, globalPlanner_o.read_state)
         rospy.Subscriber("grid_publisher" , PointCloud, globalPlanner_o.read_map)
+        
         #Publishers
+        globalPlanner_o.path_nodes_list = [[2,2,3],[2,2,3]]
         while not rospy.is_shutdown():
           globalPlanner_o.get_next_state()
+          #globalPlanner_o.publish_sim_path()
           pub_rate.sleep()
 
     except rospy.ROSInterruptException:  pass
