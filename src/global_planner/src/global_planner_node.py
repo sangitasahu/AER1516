@@ -379,9 +379,10 @@ class globalPlanner:
                         cur_path.append(cur_grid_node)                               
                   else:
                     cost_of_cur_grid = self.calc_node_cost(next_nodes[i]) 
-                    self.num_of_paths_to_check += 1 
+                    self.num_of_paths_to_check += 1                     
                     updated_cur_path = list(cur_path) 
-                    del updated_cur_path[-1]
+                    if len(cur_path) > 0:
+                      del updated_cur_path[-1]
                     updated_cur_path.append(next_nodes[i])
                     self.paths[self.num_of_paths_to_check] =   updated_cur_path  
                     self.costs[self.num_of_paths_to_check] = cur_path_cost+cost_of_cur_grid
