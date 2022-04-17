@@ -243,6 +243,7 @@ class LocalPlanner(object):
         self.fake_IMU = np.zeros(3)
 
         # Data logging
+        self.replan_successful = False
         self.solve_times = []
         self.solve_times_reported = False
 
@@ -606,6 +607,9 @@ class LocalPlanner(object):
         self.msk_env.__del__()
 
     def replan(self):
+        # Reset replan successful indicator
+        self.replan_successful = False
+
         # Check inputs initialized
         if not (self.received_state and self.received_glob_plan and 
                 self.received_cvx_decomp and self.received_global_goal and self.master_node_state.state == self.master_node_state.FLIGHT_LOCAL):
@@ -1073,6 +1077,9 @@ class LocalPlanner(object):
         if not self.opt_run:
             # self.task.writedata('first_run.opf')
             self.opt_run = True
+        
+        # Replan successful!
+        self.replan_successful = True
 
     def update_goal(self):
 

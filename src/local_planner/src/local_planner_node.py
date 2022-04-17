@@ -37,7 +37,8 @@ class LocalPlannerNode(object):
         # Subscribers
         self.state_topic = '/SQ01s/state'
         self.state_sub = rospy.Subscriber(self.state_topic,State,callback=self.state_sub_callback)
-        self.glob_plan_topic = 'global_plan'
+        # self.glob_plan_topic = 'global_plan'
+        self.glob_plan_topic = '/SQ01s/faster/global_plan'
         self.glob_plan_sub = rospy.Subscriber(self.glob_plan_topic,Path,callback=self.glob_plan_sub_callback)
         self.cvx_decomp_topic = 'CvxDecomp'
         self.cvx_decomp_sub = rospy.Subscriber(self.cvx_decomp_topic,CvxDecomp,callback=self.cvx_decomp_sub_callback)
@@ -47,10 +48,12 @@ class LocalPlannerNode(object):
         self.master_node_state_sub = rospy.Subscriber(self.master_node_state_topic,MasterNodeState,callback=self.master_node_state_sub_callback)
 
         # Publishers
-        self.local_goal_topic = 'local_plan_goal'
+        self.local_goal_topic = '/local_planner/local_plan_goal'
         self.local_goal_pub = rospy.Publisher(self.local_goal_topic,Goal,queue_size=10)
-        self.path_topic = 'local_plan'
+        self.path_topic = '/local_planner/local_plan'
         self.path_pub = rospy.Publisher(self.path_topic,Path,queue_size=10)
+        self.replan_time_topic = '/local_planner/replan_time'
+        self.replan_time_pub = rospy.Publisher(self.replan_time_topic,Float64,queue_size=10)
 
         # Timers
         self.replan_timer = rospy.Timer(rospy.Duration(1.0/self.replan_freq),self.replan_callback)
@@ -88,8 +91,9 @@ class LocalPlannerNode(object):
     def replan_callback(self,event):
         # Execute replanning step and publish path for visualization
         self.local_planner.replan()
-        if self.local_planner.opt_run:
+        if self.local_planner.opt_run and self.local_planner.replan_successful:
             self.path_pub.publish(self.local_planner.local_plan)
+            self.replan_time_pub.publish(self.local_planner.replan_time_prev)
 
     def update_goal_callback(self,event):
         # Interpolate goal at current point in time and publish
