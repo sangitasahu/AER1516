@@ -11,7 +11,7 @@ goal_height: 1  #[m] Assumed height for clicked 2d nav goals in Rviz  (not used 
 N_whole: 6 #[-] Number of discretization points in the whole trajectory
 N_safe: 6 #[-] Number of discretization points in the safe path
 
-Ra: 4.0            # [m] Radius of the sphere S
+Ra: 10.0            # [m] Radius of the sphere S
 w_max: 4.0          # [rd/s] Maximum angular velocity. ~4.0 for Hardware
 alpha_filter_dyaw: 0 #was 0.92  #[] Filter parameter for dyaw, \in [0,1]. Higher--> More aggressive filtering
 
