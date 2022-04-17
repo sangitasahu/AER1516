@@ -110,7 +110,27 @@ def calculate_vertices(poly_h):
             vertices_planar.append(valid_pts_raw) #Unused
     return vertices   
 
-def eliminate_redundant_planes(poly):
+def merge_planes(poly,d):
+    plane_normals = ([plane[1].tolist() for plane in poly])
+    idx_check = []
+    
+    #for i in range(0,len(plane_normals)-1):
+    #    idx_list = [i]
+    #    for j in range(i+1,len(plane_normals)):
+    #        if i!=j:
+    #            v0 = plane_normals[i]
+    #            v1 = plane_normals[j]
+    #            angle = np.math.atan2(np.linalg.norm(np.cross(v0,v1)),np.dot(v0,v1))
+    #            if np.degrees(angle)<=20:
+    #                idx_list.append(j)
+    #    nrms = [plane_normals[id] for id in idx_list]
+    #    new_norm = np.divide((np.sum(np.array(nrms),axis = 0)),len(idx_list))
+    #    new_poly.append([poly[i][0],np.array(new_norm)])
+
+    
+    return poly
+
+def eliminate_redundant_planes(poly,d):
     plane_normals = ([plane[1].tolist() for plane in poly])
     all_idxs = []
     for i in range(0,len(plane_normals)):
@@ -137,32 +157,11 @@ def eliminate_redundant_planes(poly):
     for i in range(0,len(poly)):
         if i not in idxs_to_eliminate:
             new_poly.append(poly[i])
+    
+    new_poly = merge_planes(new_poly,d)
+
     return new_poly
 
+    
 
-#Run standalone to test from the dataabove
-#globalpoly = [[np.array([1, 1, 0]),np.array([ 0.90906482, -0.41665471,0.])],
-#              [np.array([ 0, 14,  0]), np.array([0,  1,  0])], 
-#              [np.array([-2,  1,  0]), np.array([-0.97473232, -0.22337616,  0.])],
-#              [np.array([2., 0., 0.]), np.array([ 1., -0.,  0.])],
-#              [np.array([-2.,  0.,  0.]), np.array([-1.,  0., -0.])],
-#              [np.array([ 0., 15.,  0.]), np.array([0., 1., 0.])], 
-#              [np.array([ 0., -2.,  0.]), np.array([-0., -1., -0.])], 
-#              [np.array([ 0,  0, -1]), np.array([ 0,  0, -1])], 
-#              [np.array([0, 0, 1]), np.array([0, 0, 1])]]'''
-#poly_vertices= calculate_vertices(globalpoly)
-
-
-#Added extra planes parallel to exisiting to check elimination
-#globalpoly = [[np.array([1, 1, 0]),np.array([ 0.90906482, -0.41665471,0.])],
-#              [np.array([2, 2, 0]),np.array([ 0.90906482, -0.41665471,0.])],
-#              [np.array([ 0, 14,  0]), np.array([0,  1,  0])], 
-#             [np.array([-2,  1,  0]), np.array([-0.97473232, -0.22337616,  0.])],
-#              [np.array([2., 0., 0.]), np.array([ 1., -0.,  0.])],
-#              [np.array([-2.,  0.,  0.]), np.array([-1.,  0., -0.])],
-#              [np.array([ 0., 15.,  0.]), np.array([0., 1., 0.])], 
-#              [np.array([ 0., -2.,  0.]), np.array([-0., -1., -0.])], 
-#              [np.array([ 0,  0, -1]), np.array([ 0,  0, -1])], 
-#              [np.array([0, 0, 1]), np.array([0, 0, 1])]]
-
-#Standalone to test plane elimination just call the def and pass (globalpoly) to return simplified list
+    

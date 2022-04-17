@@ -31,6 +31,7 @@ import ellipsoid as E
 import point_cloud_processor as pcp
 import plane_utils
 import numpy as np
+import time
 #Define the convex decomposition class
 class cvx_decomp(object):
     """
@@ -39,18 +40,18 @@ class cvx_decomp(object):
     """
     def __init__(self):
         # Declare Publishers and Subscibers
-        self.point_cloud = '/grid_publisher'
-        self.path = '/global_plan'
+        self.point_cloud = '/SQ01s/global_mapper_ros/occupancy_grid1'
+        self.path = '/SQ01s/faster/global_plan'
         self.point_cloud_sub = rospy.Subscriber(self.point_cloud,PointCloud,self.point_cloud_proc)
         self.path_sub = rospy.Subscriber(self.path,Path,self.path_processor)
-        self.pub_CvxDecomp = rospy.Publisher('/CvxDecomp',CvxDecomp,queue_size=32)
-        self.obs_interest = '/xnew_obs'
-        self.pub_obs_of_interest = rospy.Publisher(self.obs_interest,PointCloud,queue_size=32)
+        self.pub_CvxDecomp = rospy.Publisher('/CvxDecomp',CvxDecomp,queue_size=1)
+        #self.obs_interest = '/xnew_obs'
+        #self.pub_obs_of_interest = rospy.Publisher(self.obs_interest,PointCloud,queue_size=1)
 
         self.threading_lock = threading.Lock()
         #Publishers to display polygon and ellipsoids
-        self.pub_Ph_display = rospy.Publisher('/polyhedra_disp',pharray_display,queue_size=32) 
-        self.pub_E_display = rospy.Publisher('/ellipsoid_disp',Earray_display,queue_size=32) 
+        self.pub_Ph_display = rospy.Publisher('/polyhedra_disp',pharray_display,queue_size=1) 
+        self.pub_E_display = rospy.Publisher('/ellipsoid_disp',Earray_display,queue_size=1) 
 
         # Select trajectory type
         # Initialize messages
@@ -68,7 +69,7 @@ class cvx_decomp(object):
         self.n_int_max = 6 #Does not do anything for now : plan to use it to limit the number of hyperplanes of the polyhedron
         self.offset_x = 0.1 #Offset of the ellipsoid around the segment
         self.drone_radius = 0.1 # Radius of the drone for obstacle inflation 
-        self.bbox = [2,2,.75]  # Local bounding box of the convex decomposer
+        self.bbox = [2,2,0.5]  # Local bounding box of the convex decomposer
         #############################################
         # Set the decomposer frequency
         self.loop_frequency = 10
@@ -80,10 +81,15 @@ class cvx_decomp(object):
     """Function to store the current trajectory msg to be passed to the Position Controller"""
     def point_cloud_proc(self,msg):
         #split the pointcloud to free and occupied points
+        self.threading_lock.acquire()
         cloud = msg.points
         cloud_list = [[point.x,point.y,point.z] for point in cloud]
-        cloud_channel = msg.channels[0].values
-        self.obs_cloud = pcp.get_obs(cloud_list,cloud_channel)
+        if msg.channels:
+            cloud_channel = msg.channels[0].values
+            self.obs_cloud = pcp.get_obs(cloud_list,cloud_channel)
+        else:
+            self.obs_cloud = np.array(cloud_list)
+        self.threading_lock.release()
 
     def path_processor(self,msg):
         self.path_list = msg.poses
@@ -94,27 +100,25 @@ class cvx_decomp(object):
         self.threading_lock.release()
     
     def interest_cloud_callback(self,obs):
-        msg = PointCloud()
+        msg = PointCloud(header=Header(stamp = rospy.Time.now(),frame_id = "vicon"))
         for p in obs:
             msg.points.append(Point32(x=p[0],y=p[1],z=p[2]))
-        msg.header = Header(stamp = rospy.Time.now(),frame_id = "vicon")
         self.pub_obs_of_interest.publish(msg)
     
     """Function called when timer matures"""
     def decompose_points(self,event):
         # Determine the time step 
-        current_time = rospy.get_time()
-        dt = current_time - self.old_time
-        #Set header_info for the publish message:
-        header_info = Header(stamp = rospy.Time.now(),frame_id = "vicon")
+         
         #Start by finding one polyhedron per segment
         self.threading_lock.acquire()
 
-        #reinitialize the messages
-        self.cvx_polyhedra = CvxDecomp()
-        self.ph_display_msg = pharray_display()
-        self.E_display_msg = Earray_display()
-
+        #reinitialize the messages #Set header_info for the publish message:
+        self.cvx_polyhedra = CvxDecomp(header = Header(stamp = rospy.Time.now(),frame_id = "vicon"))
+        self.ph_display_msg = pharray_display(header = Header(stamp = rospy.Time.now(),frame_id = "vicon"))
+        self.E_display_msg = Earray_display(header = Header(stamp = rospy.Time.now(),frame_id = "vicon"))
+        self.old_time =rospy.get_time() 
+        print("obs obstained:",len(self.obs_cloud))
+        
         for i in range(0,len(self.p)-1):
             #Start point for the segment
             p1 = self.p[i]
@@ -123,21 +127,17 @@ class cvx_decomp(object):
             #Find a bounding polyhedron based on self.bbox param.
             bbox_polyhedron = hp.add_local_bbox(p1,p2,self.bbox)
             obs = hp.set_obs_Vs(self.obs_cloud,bbox_polyhedron)            
-
             #Find an ellipsoid around the segment
             C,d,xobs_ = E.find_ellipsoid(p1,p2,self.offset_x,obs,self.drone_radius)
-            
-            self.interest_cloud_callback(xobs_)
-
+            #self.interest_cloud_callback(xobs_)
             #Get the hyperplanes at the extremeties and eliminate the spaces
             cvx_planes = hp.get_hyperplanes(obs,C,d)
             #Add the bounding box and cvx_decomp_planes to obtain inner polyhedrons
             complex_polyhedron = cvx_planes+bbox_polyhedron
             #Simplify the plyhedrons to get inner polyhedrons only 
             # Plan is to simply eliminate planes that are parallel by distance to path segment in question.
-            required_polyhedron = np.array(plane_utils.eliminate_redundant_planes(complex_polyhedron))
-            #print(required_polyhedron)
-            vertices = plane_utils.calculate_vertices(complex_polyhedron)
+            required_polyhedron = np.array(plane_utils.eliminate_redundant_planes(complex_polyhedron,d))
+            #vertices = plane_utils.calculate_vertices(complex_polyhedron)
             ###Pending work<<< 
             #FIND A FOOL PROOF WAY TO LIMIT TOTAL NUMBER OF PLANES IN A POLYHEDRA?
             #Append the ellipsoid for display
@@ -155,12 +155,11 @@ class cvx_decomp(object):
             self.cvx_polyhedra.polyhedra.append(Polyhedron(planes = plane_pack))        
             self.ph_display_msg.polyhedrons.append(ph_display(points = points_pack,normals = normals_pack))
         
+        dt =  rospy.get_time() - self.old_time
+        print(dt)
         self.threading_lock.release()
 
         #publish to display on rviz
-        self.cvx_polyhedra.header = header_info
-        self.E_display_msg.header = header_info
-        self.ph_display_msg.header = header_info
 
         self.pub_CvxDecomp.publish(self.cvx_polyhedra)
         self.pub_E_display.publish(self.E_display_msg)
@@ -171,6 +170,5 @@ class cvx_decomp(object):
 if __name__ == '__main__':
     # Code to create cvx_decomp
     rospy.init_node('cvx_decomp',disable_signals=True)
-
     cvx_decomp()
     rospy.spin()
