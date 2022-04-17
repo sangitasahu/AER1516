@@ -169,76 +169,24 @@ void octomap_binary_callback(const octomap_msgs::OctomapConstPtr& octomap_msg)
         bool in_fov = camera_fov_gen(rot_x, rot_y, rot_z);
 
         if (in_fov){
+
             gridOccupancy[grid_index] = 0.;
-        }
 
 
+            octomap::OcTreeNode* result = octree->search(grids3d[grid_index].x, grids3d[grid_index].y, grids3d[grid_index].z);
 
-    }
-
-    int tree_index = 0;
-    for(octomap::OcTree::leaf_bbx_iterator it = octree->begin_leafs_bbx(min_bbx,max_bbx), end = octree->end_leafs_bbx(); it!= end; ++it)
-    {
-        tree_index++;
-
-        occupancyPoints3d = it.getCoordinate();
-
-        point3d.x = occupancyPoints3d.x();
-        point3d.y = occupancyPoints3d.y();
-        point3d.z = occupancyPoints3d.z();
-
-        point3d.x = round_val(point3d.x);
-        point3d.y = round_val(point3d.y);
-        point3d.z = round_val(point3d.z);
-
-        //box limits
-        float frontLim;
-        float rearLim;
-        float leftLim;
-        float rightLim;
-        float upperLim;
-        float lowerLim;
-
-        if(it->getOccupancy()>0.5){
-            frontLim = point3d.x + (resolution);
-            rearLim = point3d.x - (resolution);
-            leftLim = point3d.y + (resolution);
-            rightLim = point3d.y - (resolution);
-            upperLim = point3d.z + (resolution);
-            lowerLim = point3d.z - (resolution);
+            if(result){
+                if(result->getOccupancy()>0.5){
+                    gridOccupancy[grid_index] = 1.;
+                    Occup3d.push_back(grids3d[grid_index]);
+                }
+            }
         }
         else{
-            frontLim = point3d.x + (resolution);
-            rearLim = point3d.x - (resolution);
-            leftLim = point3d.y + (resolution);
-            rightLim = point3d.y - (resolution);
-            upperLim = point3d.z + (resolution);
-            lowerLim = point3d.z - (resolution);
-        }
-
-
-
-        for(int grid_index =0; grid_index<grids3d.size(); grid_index++){ 
-
-            if (grids3d[grid_index].x>=rearLim && grids3d[grid_index].x<=frontLim && grids3d[grid_index].y>=rightLim && grids3d[grid_index].y<=leftLim && grids3d[grid_index].z>=lowerLim && grids3d[grid_index].z<=upperLim){
-                if(it->getOccupancy()>0.5){
-                    gridOccupancy[grid_index] = 1.;
-                }   
-            }
-
-            if (gridOccupancy[grid_index]==-1.){
-                points3d.push_back(grids3d[grid_index]);
-            }
-
-            if (gridOccupancy[grid_index]==1.){
-                Occup3d.push_back(grids3d[grid_index]);
-            }
-
+            points3d.push_back(grids3d[grid_index]);
         }
 
     }
-    
-    //ROS_INFO("%d", gridOccupancy.size());
 
     gridChannel.name = "grid occupancy";
     gridChannel.values = gridOccupancy;
