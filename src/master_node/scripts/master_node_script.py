@@ -19,7 +19,6 @@ from nav_msgs.msg import Path
 from std_msgs.msg import UInt8, Header
 from snapstack_msgs.msg import State, Goal
 from geometry_msgs.msg import Point, PointStamped, Vector3, Quaternion, PoseStamped
-from tf.transformations import euler_from_quaternion
 from master_node.msg import MasterNodeState
 
 class MasterNode(object):
@@ -33,7 +32,7 @@ class MasterNode(object):
         self.start_y = 0
         self.start_z = 0
         self.start_yaw = 0
-        self.flight_z = 2 # m. Fly at constant height off the ground for simplicity
+        self.flight_z = 3 # m. Fly at constant height off the ground for simplicity
         self.takeoff_speed = 3 # m/s
 
         self.frame_id = "world"
@@ -58,8 +57,8 @@ class MasterNode(object):
         # 0 - Local planner
         # 1 - Global planner passthrough (for debugging)
         # 2 - Hold location (for debugging)
-        self.path_mode = 2
-        self.global_plan_flight_speed = 1 # m/s
+        self.path_mode = 0
+        self.global_plan_flight_speed = 3 # m/s
 
         # Rates
         self.goal_freq = 100 # Hz
@@ -71,10 +70,8 @@ class MasterNode(object):
         self.glob_plan_sub = rospy.Subscriber(self.glob_plan_topic,Path,callback=self.glob_plan_sub_callback)
         self.local_plan_goal_topic = 'local_plan_goal'
         self.local_plan_goal_sub = rospy.Subscriber(self.local_plan_goal_topic,Goal,callback=self.local_plan_sub_callback)
-        # self.clicked_point_topic = 'clicked_point'
-        # self.clicked_point_sub = rospy.Subscriber(self.clicked_point_topic,PointStamped,callback=self.clicked_point_sub_callback)
-        self.clicked_point_topic = '/move_base_simple/goal'
-        self.clicked_point_sub = rospy.Subscriber(self.clicked_point_topic,PoseStamped,callback=self.clicked_point_sub_callback)
+        self.clicked_point_topic = 'clicked_point'
+        self.clicked_point_sub = rospy.Subscriber(self.clicked_point_topic,PointStamped,callback=self.clicked_point_sub_callback)
 
         # Publishers
         self.goal_topic = '/SQ01s/goal'
@@ -91,7 +88,7 @@ class MasterNode(object):
         # Inputs
         self.state = State()
         self.glob_plan = Path()
-        self.clicked_point = PoseStamped()
+        self.clicked_point = PointStamped()
         self.local_plan_goal = Goal()
 
         # State variables
@@ -275,17 +272,8 @@ class MasterNode(object):
                 goal_new.yaw = self.goal_filt_yaw
                 self.goal_pub.publish(goal_new)
         elif self.node_state == NodeState.FLIGHT_HOLD:
-            # Hold position at clicked point
-            if self.received_point:
-                goal_new = Goal(header = Header(stamp=rospy.get_rostime(),frame_id = self.frame_id))
-                goal_new.p.x = self.clicked_point.pose.position.x
-                goal_new.p.y = self.clicked_point.pose.position.y
-                goal_new.p.z = self.flight_z
-                quat_clicked = [self.clicked_point.pose.orientation.x,self.clicked_point.pose.orientation.y,
-                            self.clicked_point.pose.orientation.z,self.clicked_point.pose.orientation.w]
-                euler_clicked = euler_from_quaternion(quat_clicked,'rzyx')
-                goal_new.yaw = euler_clicked[0]
-                self.goal_pub.publish(goal_new)
+            # Hold position
+            hold = 5
 
         # Update global goal location for global planner
         if self.goal_mode == 0:
@@ -298,8 +286,7 @@ class MasterNode(object):
             if self.received_point:
                 # Update global goal with current clicked point value, held at target flight Z level
                 global_goal = PointStamped(header=Header(stamp=rospy.get_rostime(),frame_id = self.frame_id),
-                                    point = Point(x=self.clicked_point.pose.position.x,
-                                    y=self.clicked_point.pose.position.y,z=self.clicked_point.pose.position.z))
+                                    point = Point(x=self.clicked_point.point.x,y=self.clicked_point.point.y,z=self.clicked_point.point.z))
                 global_goal.point.z = self.flight_z
                 self.goal_loc_pub.publish(global_goal)
             else:

@@ -1,0 +1,8 @@
+prefix=/home/sangita/project_ws/AER1516/devel_isolated/catkin_simple
+
+Name: catkin_simple
+Description: Description of catkin_simple
+Version: 0.1.1
+Cflags: 
+Libs: -L${prefix}/lib 
+Requires: catkin

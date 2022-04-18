@@ -1,0 +1,8 @@
+prefix=/home/sangita/project_ws/AER1516/devel_isolated/fla_utils
+
+Name: fla_utils
+Description: Description of fla_utils
+Version: 0.0.0
+Cflags: -I/home/sangita/project_ws/AER1516/src/acl-mapping/fla_utils/include
+Libs: -L${prefix}/lib 
+Requires: 

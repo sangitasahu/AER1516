@@ -1,0 +1,44 @@
+#IncludeRegexLine: ^[ 	]*[#%][ 	]*(include|import)[ 	]*[<"]([^">]+)([">])
+
+#IncludeRegexScan: ^.*$
+
+#IncludeRegexComplain: ^$
+
+#IncludeRegexTransform: 
+
+/home/sangita/project_ws/AER1516/src/acl-mapping/global-mapper/global_mapper/src/distance_grid/distance_grid.cc
+distance_grid/distance_grid.h
+/home/sangita/project_ws/AER1516/src/acl-mapping/global-mapper/global_mapper/src/distance_grid/distance_grid/distance_grid.h
+
+/home/sangita/project_ws/AER1516/src/acl-mapping/global-mapper/global_mapper/src/distance_grid/distance_grid.h
+cstdint
+-
+vector
+-
+iostream
+-
+queue
+-
+set
+-
+voxel_grid/voxel_grid.h
+/home/sangita/project_ws/AER1516/src/acl-mapping/global-mapper/global_mapper/src/distance_grid/voxel_grid/voxel_grid.h
+
+/home/sangita/project_ws/AER1516/src/acl-mapping/global-mapper/global_mapper/src/voxel_grid/voxel_grid.h
+stdio.h
+-
+stdint.h
+-
+stdlib.h
+-
+math.h
+-
+assert.h
+-
+vector
+-
+cstring
+-
+iostream
+-
+

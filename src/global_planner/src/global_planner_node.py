@@ -3,7 +3,7 @@
 import math
 import rospy
 from snapstack_msgs.msg import Goal, State
-from geometry_msgs.msg import PoseStamped, PointStamped
+from geometry_msgs.msg import PoseStamped, PointStamped, Point
 from nav_msgs.msg import Path
 from sensor_msgs.msg import PointCloud, ChannelFloat32
 from std_msgs.msg import Header
@@ -32,7 +32,7 @@ class globalPlanner:
         self.SCALE_FACTOR_Z = 3
         self.BB_WIDTH_Z = self.BB_WIDTH/self.SCALE_FACTOR_Z
         self.STOP_DISTANCE = 1
-        self.RESOLUTION = 0.5  #Can't go below this as the quadrotor is about 0.3m
+        self.RESOLUTION = 0.25  #Can't go below this as the quadrotor is about 0.3m
         self.X_LIMIT = [0 , 100]
         self.Y_LIMIT = [0,  100]
         self.Z_LIMIT = [0,  10]
@@ -63,8 +63,8 @@ class globalPlanner:
         self.FIND_ALL_FEASIBLE_MOVES = 1
         self.FIND_NEXT_MOVE = 0
         #JPS related
-        self.MAX_NUM_ITERATIONS = 100
-        self.MAX_PATHS_TO_CHECK = 20
+        self.MAX_NUM_ITERATIONS = 250
+        self.MAX_PATHS_TO_CHECK = 200
         self.MOVE_IDLE = 12
         #Moves      
         #Moves one cell ahead        
@@ -75,6 +75,7 @@ class globalPlanner:
         self.MOVES_2 = [14,22,2,24,4,20,0,10]
         #Select moves for obstacle detection
         self.MOVES = self.MOVES_2
+        
 
         """#Variables"""
 
@@ -83,8 +84,10 @@ class globalPlanner:
         self.nxt_goal = Goal()
         self.global_nodes_path = Path()
         self.map_points = PointCloud()
-        self.occupancy_sts = ChannelFloat32()
-        self.occupancy_sts.name = 'grid occupancy'
+        self.grid_occupancy_sts = ChannelFloat32()
+        self.grid_occupancy_sts.name = 'grid occupancy'
+        self.pub_map_points = PointCloud()
+        self.occup_grid = PointCloud()
 
         #Map related
         self.x_range =[0,0]
@@ -94,7 +97,7 @@ class globalPlanner:
         #JPS related 
         self.nxt_move_num = 0 #Move number
         self.num_of_cells = 0
-        self.cur_goal = [20,20,3]      
+        self.cur_goal = [10,10,3]      
         self.proj_cur_goal = [0,0,0]
         self.cur_state = [0,0,0]
         self.path_nodes_list = [[2,2,3]]
@@ -108,6 +111,8 @@ class globalPlanner:
         self.run_num = 0
         self.reached_cur_goal = False
         self.old_move = self.MOVE_IDLE
+        self.occupancy_sts = []
+
 
         #Control flags and counters
         self.seq_cntr = 0
@@ -125,8 +130,9 @@ class globalPlanner:
         #Publishers related
         self.global_path_pub = rospy.Publisher('global_plan', Path, queue_size=100)
         self.goal_pub = rospy.Publisher('/SQ01s/goal', Goal, queue_size=100)
-        self.proj_goal_pub = rospy.Publisher('/projected_goal', PointStamped, queue_size=10)																				
-
+        self.proj_goal_pub = rospy.Publisher('/projected_goal', PointStamped, queue_size=10)	
+        self.global_grid_pub = rospy.Publisher('/global_grid',PointCloud, queue_size=2)			
+       
         #Dictionaries
         self.coord_offset_dict = {
           0 : [ -2 , -2 , 0 ],
@@ -175,7 +181,7 @@ class globalPlanner:
     """#Read the goal location for the drone"""
     def read_goal(self, msg):
       if ([msg.point.x, msg.point.y, msg.point.z] != self.cur_goal) and self.jps_run_sts == self.COMPLETED and self.goal_reached:
-        self.cur_goal = [msg.point.x, msg.point.y, msg.point.z]         
+        #self.cur_goal = [msg.point.x, msg.point.y, msg.point.z]         
         self.goal_reached = False
         print("-----------------New goal received : ", self.cur_goal , "------------------")
 
@@ -183,16 +189,44 @@ class globalPlanner:
     def read_state(self,msg):
       if self.jps_run_sts == self.COMPLETED:
         self.cur_state = [msg.pos.x,msg.pos.y, msg.pos.z]
-      
+
+    """####Read occup_grid1"""
+    def read_obstacles(self,msg):
+      if self.jps_run_sts == self.COMPLETED:
+        #print("Read obstacles!") 
+        self.occup_grid = msg
+
+    """Inflate the obstacles"""
+    def inflate_the_obstacles(self): 
+      #print("Inflating obstacles!")
+      self.new_occup_grid = PointCloud()
+      for point in self.occup_grid.points :    
+        if self.RESOLUTION >= 0.5:
+          obs_offsets = self.MOVES_1
+        else:
+          obs_offsets = self.MOVES_1 + self.MOVES_2
+        node = [point.x, point.y, point.z]    
+        for offset in obs_offsets:
+          next_node = self.get_coordinates(offset, node)              
+          if self.is_occupied(next_node) != self.OCCUPIED:
+            num = self.get_node_offset(next_node)                    
+            self.occupancy_sts[num] = self.OCCUPIED
+            cell = Point()
+            cell.x, cell.y, cell.z = next_node[0], next_node[1],  next_node[2]
+            self.new_occup_grid.points.append(cell)   
+      self.publish_global_grid()
+
     """Generate the 3D Map from the point clouds containing occupancy info"""
     def read_map(self,pointClouds):
       if self.jps_run_sts == self.COMPLETED:
+        #print("Reading Map!") 
         self.map_points.points = pointClouds.points
-        self.occupancy_sts.values = pointClouds.channels[0].values
-        self.num_of_cells = len(self.occupancy_sts.values) 
+        self.grid_occupancy_sts.values = pointClouds.channels[0].values
+        self.num_of_cells = len(self.grid_occupancy_sts.values)
+        self.occupancy_sts = list(self.grid_occupancy_sts.values)
         #print("New map!")                     
         if len(pointClouds.points) == self.NUM_OF_CELLS: 
-          #print("Empty : ", self.occupancy_sts.values.count(0), "Unknown: " ,self.occupancy_sts.values.count(-1), "Occupied : ", self.occupancy_sts.values.count(1), "Total : ", len(self.occupancy_sts.values))
+          #print("Empty : ", self.occupancy_sts.count(0), "Unknown: " ,self.occupancy_sts.count(-1), "Occupied : ", self.occupancy_sts.count(1), "Total : ", len(self.occupancy_sts))
           self.map_invalid = False 
           start_state = pointClouds.points[self.ORIGIN_CELL_NUM]
           self.x_range = [start_state.x , start_state.x + self.BB_WIDTH/2 ]
@@ -202,12 +236,12 @@ class globalPlanner:
         else:   
           self.map_invalid = True      
           print("Length of grid received is ", len(pointClouds.points), "which is invalid !")
+          print("Looking for ", self.NUM_OF_CELLS , " points!")
           print("Correctly set the BB_WIDTH and RESOLUTION variables!")
-    
 
     """###Calculate the next state"""
     def get_next_state(self):
-      if not self.map_invalid and self.jps_run_sts == self.COMPLETED and len(self.occupancy_sts.values) == self.NUM_OF_CELLS:
+      if not self.map_invalid and self.jps_run_sts == self.COMPLETED and len(self.occupancy_sts) == self.NUM_OF_CELLS:
         # not self.goal_reached and 
         start_time_jps = time.time()
         self.jps_run_sts = self.RUNNING
@@ -218,6 +252,7 @@ class globalPlanner:
         self.path_nodes_list = [self.cur_state]
         #Get the projected goals in unknown space and known free space
         print("Actual state :", self.cur_state, "Current state from mapper :", self.cur_state_in_grid, "Goal Location :" ,self.cur_goal)
+        self.inflate_the_obstacles()
         #Goal is behind the drone
         if self.goal_is_behind(self.cur_state_in_grid,self.cur_goal):
           self.get_projected_goal()
@@ -226,13 +261,16 @@ class globalPlanner:
           self.get_projected_goal()
           if self.goal_is_reachable:          
             next_states = self.find_jps_path()  
-            if self.debug_en == False:
-              print("Global path found by JPS! " )        
-            val_sts = self.is_path_valid(next_states)
-            if val_sts == self.VALID_PATH:
-              for node in next_states:
-                self.path_nodes_list.append(node)
-          self.path_nodes_list.append(self.proj_cur_goal)
+            if len(next_states) > 2:
+              if self.debug_en == False :
+                print("Global path found by JPS! " )        
+              val_sts = self.is_path_valid(next_states)
+              if val_sts == self.VALID_PATH:
+                for node in next_states:
+                  self.path_nodes_list.append(node)
+            else:
+              if self.debug_en == False :
+                print("No path found by JPS! " )  
         #Publish the global plan
         self.publish_global_plan()
         #If end goal is reached
@@ -273,7 +311,7 @@ class globalPlanner:
         if (goal_within_bbx and goal_in_unknown) :
           self.goal_is_reachable = True
           occ_sts = self.NOT_OCCUPIED
-          print("Goal within the bounding box but is in unknown space!")
+          print("Goal within the bounding box but is in the unknown space!")
         elif behind_goal :
           self.goal_is_reachable = False
           occ_sts = self.UNKNOWN
@@ -282,22 +320,24 @@ class globalPlanner:
           self.goal_is_reachable = True
           occ_sts = self.NOT_OCCUPIED
 
+
         not_occupied_cells = []
+        self.PROJ_GOAL_RADIUS = 5
         #Get the nearest unknown node to the goal
         for i in range(0, self.num_of_cells):
           cur_point = [self.map_points.points[i].x, self.map_points.points[i].y, self.map_points.points[i].z]
-          if self.occupancy_sts.values[i] == occ_sts and (cur_point[2]==self.cur_goal[2]):
+          if self.occupancy_sts[i] == occ_sts and (cur_point[2]==self.cur_goal[2]):
             d_goal = self.calc_dist_btw_nodes(cur_point, self.cur_goal,self.EUCLIDEAN_DIST)
-            if d_goal <= min_d_goal:
+            if d_goal <= min_d_goal and d_goal < self.PROJ_GOAL_RADIUS:
               min_d_goal = d_goal
               self.proj_cur_goal = cur_point
-          elif self.occupancy_sts.values[i] == self.NOT_OCCUPIED and not behind_goal:
+          elif self.occupancy_sts[i] == self.NOT_OCCUPIED and not behind_goal:
             not_occupied_cells.append(cur_point)
 
         self.unk_cur_goal = self.proj_cur_goal 
 
       self.end_p = time.time()
-      if self.debug_en:
+      if self.debug_en :
         print("Time to read through the map : ", self.end_p - self.start_p)
         print("Unknown and Known projected goals are " , self.unk_cur_goal ,self.proj_cur_goal)
 
@@ -487,6 +527,15 @@ class globalPlanner:
         print("Best move =", best_move )
       return best_move, feasible_moves
     
+
+    """####Check move feasibility"""
+    def is_good_move(self,old_move, best_move, cur_state):
+      next_state = self.get_coordinates(old_move,cur_state)
+      if next_state[0] < cur_state[0]:
+        return False
+      else:
+        return True
+    
     """###Get neighbours for a move"""
     def get_neighbours(self,nxt_move_num,cur_state):
       next_neighbours = []      
@@ -667,9 +716,9 @@ class globalPlanner:
     def is_occupied(self,node):
       num = self.get_node_offset(node)
       if num < self.NUM_OF_CELLS:
-        if self.occupancy_sts.values[num] == self.OCCUPIED:
+        if self.occupancy_sts[num] == self.OCCUPIED:
           return self.OCCUPIED
-        elif self.occupancy_sts.values[num] == self.UNKNOWN:
+        elif self.occupancy_sts[num] == self.UNKNOWN:
           return self.UNKNOWN
         else:
           return self.NOT_OCCUPIED 
@@ -752,7 +801,7 @@ class globalPlanner:
         node_pose.pose.orientation.w = 1
         node_pose.header.stamp = rospy.Time.now()
         node_pose.header.seq = i
-        node_pose.header.frame_id = 'world'
+        node_pose.header.frame_id = 'vicon'
         pose_list.append(node_pose)
         i += 1
 
@@ -780,7 +829,7 @@ class globalPlanner:
                  
       self.header.seq = self.seq_cntr
       self.header.stamp = rospy.Time.now()
-      self.header.frame_id = 'world'
+      self.header.frame_id = 'vicon'
       self.nxt_goal.header = self.header   
 
       if len(self.path_nodes_list) > 1:
@@ -800,23 +849,34 @@ class globalPlanner:
       self.goal_pub.publish(self.nxt_goal)
 
 
+    """###Publish global grid after inflation"""
+    def publish_global_grid(self):
+      self.header.seq = self.seq_cntr
+      self.header.stamp = rospy.Time.now()
+      self.header.frame_id = 'vicon'
+      self.pub_map_points.header = self.header 
+      self.pub_map_points.points = self.new_occup_grid.points
+      self.global_grid_pub.publish(self.pub_map_points)
+      
+
 """#Main module"""
 
 if __name__ == '__main__':
     rospy.init_node('globalPlanner')
-    pub_rate = rospy.Rate(2) #20 Hz
+    pub_rate = rospy.Rate(1) #20 Hz
     try:
         globalPlanner_o = globalPlanner()
         #Subscribers        
         rospy.Subscriber("goal_loc", PointStamped, globalPlanner_o.read_goal)
         rospy.Subscriber("/SQ01s/state" , State, globalPlanner_o.read_state)
         rospy.Subscriber("grid_publisher" , PointCloud, globalPlanner_o.read_map)
+        rospy.Subscriber("/occup_grid1", PointCloud, globalPlanner_o.read_obstacles)
         
         #Publishers
         globalPlanner_o.path_nodes_list = [[2,2,3],[2,2,3]]
         while not rospy.is_shutdown():
           globalPlanner_o.get_next_state()
-          #globalPlanner_o.publish_sim_path()
+          globalPlanner_o.publish_sim_path()
           pub_rate.sleep()
 
     except rospy.ROSInterruptException:  pass

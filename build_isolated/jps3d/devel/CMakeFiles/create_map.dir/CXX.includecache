@@ -1,0 +1,16 @@
+#IncludeRegexLine: ^[ 	]*[#%][ 	]*(include|import)[ 	]*[<"]([^">]+)([">])
+
+#IncludeRegexScan: ^.*$
+
+#IncludeRegexComplain: ^$
+
+#IncludeRegexTransform: 
+
+/home/sangita/project_ws/AER1516/src/faster/thirdparty/jps3d/test/create_map.cpp
+iostream
+-
+fstream
+-
+yaml-cpp/yaml.h
+-
+

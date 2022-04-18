@@ -1,0 +1,8 @@
+prefix=/home/sangita/project_ws/AER1516/install_isolated
+
+Name: octomap_listener
+Description: Description of octomap_listener
+Version: 0.0.0
+Cflags: 
+Libs: -L${prefix}/lib 
+Requires: 

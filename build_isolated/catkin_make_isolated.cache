@@ -1,0 +1,2 @@
+acl-gazebo/acl_sim:acl-mapping/depthmap_filter:acl-mapping/fla_msgs:acl-mapping/fla_utils:acl-mapping/global-mapper/global_mapper:acl-mapping/global-mapper/global_mapper_ros:catkin_simple:convex_decomposer:decomp_ros_msgs:decomp_ros_utils:faster/faster:faster/faster_msgs:faster/thirdparty/DecompROS/DecompUtil:faster/thirdparty/jps3d:global_planner:local_planner:map_simulator:mapper:master_node:snapstack_msgs
+-G Unix Makefiles -DCATKIN_DEVEL_PREFIX=/home/sangita/project_ws/AER1516/devel_isolated -DCMAKE_INSTALL_PREFIX=/home/sangita/project_ws/AER1516/install_isolated

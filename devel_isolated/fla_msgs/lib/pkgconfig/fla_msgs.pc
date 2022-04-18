@@ -1,0 +1,8 @@
+prefix=/home/sangita/project_ws/AER1516/devel_isolated/fla_msgs
+
+Name: fla_msgs
+Description: Description of fla_msgs
+Version: 0.0.0
+Cflags: -I/home/sangita/project_ws/AER1516/devel_isolated/fla_msgs/include
+Libs: -L${prefix}/lib 
+Requires: 

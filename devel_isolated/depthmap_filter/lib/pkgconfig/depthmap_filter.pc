@@ -1,0 +1,8 @@
+prefix=/home/sangita/project_ws/AER1516/devel_isolated/depthmap_filter
+
+Name: depthmap_filter
+Description: Description of depthmap_filter
+Version: 0.0.0
+Cflags: -I/home/sangita/project_ws/AER1516/src/acl-mapping/depthmap_filter/src -I/usr/include -I/usr/include/opencv
+Libs: -L${prefix}/lib -ldepthmap_filter /usr/lib/x86_64-linux-gnu/libopencv_core.so.3.2.0 /usr/lib/x86_64-linux-gnu/libopencv_highgui.so.3.2.0
+Requires: 

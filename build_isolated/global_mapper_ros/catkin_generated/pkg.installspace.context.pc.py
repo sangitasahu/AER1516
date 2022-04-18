@@ -1,0 +1,8 @@
+# generated from catkin/cmake/template/pkg.context.pc.in
+CATKIN_PACKAGE_PREFIX = ""
+PROJECT_PKG_CONFIG_INCLUDE_DIRS = "${prefix}/include;/usr/include/pcl-1.8;/usr/include/eigen3;/usr/include".split(';') if "${prefix}/include;/usr/include/pcl-1.8;/usr/include/eigen3;/usr/include" != "" else []
+PROJECT_CATKIN_DEPENDS = "roscpp;nodelet;fla_utils;pcl_ros;pcl_msgs;pcl_conversions;tf2_ros;nav_msgs;visualization_msgs;tf2_sensor_msgs;message_generation;image_transport;cv_bridge;fla_msgs;snapstack_msgs".replace(';', ' ')
+PKG_CONFIG_LIBRARIES_WITH_PREFIX = "-lglobal_mapper_ros;/usr/lib/x86_64-linux-gnu/libpcl_common.so;/usr/lib/x86_64-linux-gnu/libboost_system.so;/usr/lib/x86_64-linux-gnu/libboost_filesystem.so;/usr/lib/x86_64-linux-gnu/libboost_thread.so;/usr/lib/x86_64-linux-gnu/libboost_date_time.so;/usr/lib/x86_64-linux-gnu/libboost_iostreams.so;/usr/lib/x86_64-linux-gnu/libboost_serialization.so;/usr/lib/x86_64-linux-gnu/libboost_chrono.so;/usr/lib/x86_64-linux-gnu/libboost_atomic.so;/usr/lib/x86_64-linux-gnu/libboost_regex.so;/usr/lib/x86_64-linux-gnu/libpthread.so".split(';') if "-lglobal_mapper_ros;/usr/lib/x86_64-linux-gnu/libpcl_common.so;/usr/lib/x86_64-linux-gnu/libboost_system.so;/usr/lib/x86_64-linux-gnu/libboost_filesystem.so;/usr/lib/x86_64-linux-gnu/libboost_thread.so;/usr/lib/x86_64-linux-gnu/libboost_date_time.so;/usr/lib/x86_64-linux-gnu/libboost_iostreams.so;/usr/lib/x86_64-linux-gnu/libboost_serialization.so;/usr/lib/x86_64-linux-gnu/libboost_chrono.so;/usr/lib/x86_64-linux-gnu/libboost_atomic.so;/usr/lib/x86_64-linux-gnu/libboost_regex.so;/usr/lib/x86_64-linux-gnu/libpthread.so" != "" else []
+PROJECT_NAME = "global_mapper_ros"
+PROJECT_SPACE_DIR = "/home/sangita/project_ws/AER1516/install_isolated"
+PROJECT_VERSION = "1.1.3"

@@ -1,0 +1,8 @@
+prefix=/home/sangita/project_ws/AER1516/install_isolated
+
+Name: global_planner
+Description: Description of global_planner
+Version: 0.0.0
+Cflags: 
+Libs: -L${prefix}/lib -lglobal_planner
+Requires: rospy std_msgs map_simulator geometry_msgs snapstack_msgs sensor_msgs nav_msgs

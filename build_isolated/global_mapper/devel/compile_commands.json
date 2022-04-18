@@ -1,0 +1,47 @@
+[
+{
+  "directory": "/home/sangita/project_ws/AER1516/build_isolated/global_mapper/devel",
+  "command": "/usr/bin/c++  -Doccupancy_grid_EXPORTS -I/home/sangita/project_ws/AER1516/src/acl-mapping/global-mapper/global_mapper/include -isystem /home/sangita/project_ws/AER1516/src/acl-mapping/global-mapper/global_mapper/src -isystem /usr/include/pcl-1.8 -isystem /usr/include/eigen3  -O3 -DNDEBUG -fPIC   -std=c++11 -o CMakeFiles/occupancy_grid.dir/src/occupancy_grid/occupancy_grid.cc.o -c /home/sangita/project_ws/AER1516/src/acl-mapping/global-mapper/global_mapper/src/occupancy_grid/occupancy_grid.cc",
+  "file": "/home/sangita/project_ws/AER1516/src/acl-mapping/global-mapper/global_mapper/src/occupancy_grid/occupancy_grid.cc"
+},
+{
+  "directory": "/home/sangita/project_ws/AER1516/build_isolated/global_mapper/devel",
+  "command": "/usr/bin/c++  -Dcost_grid_EXPORTS -I/home/sangita/project_ws/AER1516/src/acl-mapping/global-mapper/global_mapper/include -isystem /home/sangita/project_ws/AER1516/src/acl-mapping/global-mapper/global_mapper/src -isystem /usr/include/pcl-1.8 -isystem /usr/include/eigen3  -O3 -DNDEBUG -fPIC   -std=c++11 -o CMakeFiles/cost_grid.dir/src/cost_grid/cost_grid.cc.o -c /home/sangita/project_ws/AER1516/src/acl-mapping/global-mapper/global_mapper/src/cost_grid/cost_grid.cc",
+  "file": "/home/sangita/project_ws/AER1516/src/acl-mapping/global-mapper/global_mapper/src/cost_grid/cost_grid.cc"
+},
+{
+  "directory": "/home/sangita/project_ws/AER1516/build_isolated/global_mapper/devel",
+  "command": "/usr/bin/c++  -Dglobal_mapper_EXPORTS -I/home/sangita/project_ws/AER1516/src/acl-mapping/global-mapper/global_mapper/include -isystem /home/sangita/project_ws/AER1516/src/acl-mapping/global-mapper/global_mapper/src -isystem /usr/include/pcl-1.8 -isystem /usr/include/eigen3  -O3 -DNDEBUG -fPIC   -std=c++11 -o CMakeFiles/global_mapper.dir/src/global_mapper/global_mapper.cc.o -c /home/sangita/project_ws/AER1516/src/acl-mapping/global-mapper/global_mapper/src/global_mapper/global_mapper.cc",
+  "file": "/home/sangita/project_ws/AER1516/src/acl-mapping/global-mapper/global_mapper/src/global_mapper/global_mapper.cc"
+},
+{
+  "directory": "/home/sangita/project_ws/AER1516/build_isolated/global_mapper/devel",
+  "command": "/usr/bin/c++  -Ddistance_grid_EXPORTS -I/home/sangita/project_ws/AER1516/src/acl-mapping/global-mapper/global_mapper/include -isystem /home/sangita/project_ws/AER1516/src/acl-mapping/global-mapper/global_mapper/src -isystem /usr/include/pcl-1.8 -isystem /usr/include/eigen3  -O3 -DNDEBUG -fPIC   -std=c++11 -o CMakeFiles/distance_grid.dir/src/distance_grid/distance_grid.cc.o -c /home/sangita/project_ws/AER1516/src/acl-mapping/global-mapper/global_mapper/src/distance_grid/distance_grid.cc",
+  "file": "/home/sangita/project_ws/AER1516/src/acl-mapping/global-mapper/global_mapper/src/distance_grid/distance_grid.cc"
+},
+{
+  "directory": "/home/sangita/project_ws/AER1516/build_isolated/global_mapper/devel",
+  "command": "/usr/bin/c++   -I/home/sangita/project_ws/AER1516/src/acl-mapping/global-mapper/global_mapper/include -isystem /home/sangita/project_ws/AER1516/src/acl-mapping/global-mapper/global_mapper/src -isystem /usr/include/pcl-1.8 -isystem /usr/include/eigen3  -O3 -DNDEBUG   -std=c++11 -o CMakeFiles/global_mapper_tests.dir/test/cost_grid_tests.cc.o -c /home/sangita/project_ws/AER1516/src/acl-mapping/global-mapper/global_mapper/test/cost_grid_tests.cc",
+  "file": "/home/sangita/project_ws/AER1516/src/acl-mapping/global-mapper/global_mapper/test/cost_grid_tests.cc"
+},
+{
+  "directory": "/home/sangita/project_ws/AER1516/build_isolated/global_mapper/devel",
+  "command": "/usr/bin/c++   -I/home/sangita/project_ws/AER1516/src/acl-mapping/global-mapper/global_mapper/include -isystem /home/sangita/project_ws/AER1516/src/acl-mapping/global-mapper/global_mapper/src -isystem /usr/include/pcl-1.8 -isystem /usr/include/eigen3  -O3 -DNDEBUG   -std=c++11 -o CMakeFiles/global_mapper_tests.dir/test/voxel_grid_indexer_tests.cc.o -c /home/sangita/project_ws/AER1516/src/acl-mapping/global-mapper/global_mapper/test/voxel_grid_indexer_tests.cc",
+  "file": "/home/sangita/project_ws/AER1516/src/acl-mapping/global-mapper/global_mapper/test/voxel_grid_indexer_tests.cc"
+},
+{
+  "directory": "/home/sangita/project_ws/AER1516/build_isolated/global_mapper/devel",
+  "command": "/usr/bin/c++   -I/home/sangita/project_ws/AER1516/src/acl-mapping/global-mapper/global_mapper/include -isystem /home/sangita/project_ws/AER1516/src/acl-mapping/global-mapper/global_mapper/src -isystem /usr/include/pcl-1.8 -isystem /usr/include/eigen3  -O3 -DNDEBUG   -std=c++11 -o CMakeFiles/global_mapper_tests.dir/test/distance_grid_tests.cc.o -c /home/sangita/project_ws/AER1516/src/acl-mapping/global-mapper/global_mapper/test/distance_grid_tests.cc",
+  "file": "/home/sangita/project_ws/AER1516/src/acl-mapping/global-mapper/global_mapper/test/distance_grid_tests.cc"
+},
+{
+  "directory": "/home/sangita/project_ws/AER1516/build_isolated/global_mapper/devel",
+  "command": "/usr/bin/c++   -I/home/sangita/project_ws/AER1516/src/acl-mapping/global-mapper/global_mapper/include -isystem /home/sangita/project_ws/AER1516/src/acl-mapping/global-mapper/global_mapper/src -isystem /usr/include/pcl-1.8 -isystem /usr/include/eigen3  -O3 -DNDEBUG   -std=c++11 -o CMakeFiles/global_mapper_tests.dir/test/global_mapper_tests.cc.o -c /home/sangita/project_ws/AER1516/src/acl-mapping/global-mapper/global_mapper/test/global_mapper_tests.cc",
+  "file": "/home/sangita/project_ws/AER1516/src/acl-mapping/global-mapper/global_mapper/test/global_mapper_tests.cc"
+},
+{
+  "directory": "/home/sangita/project_ws/AER1516/build_isolated/global_mapper/devel",
+  "command": "/usr/bin/c++   -I/home/sangita/project_ws/AER1516/src/acl-mapping/global-mapper/global_mapper/include -isystem /home/sangita/project_ws/AER1516/src/acl-mapping/global-mapper/global_mapper/src -isystem /usr/include/pcl-1.8 -isystem /usr/include/eigen3  -O3 -DNDEBUG   -std=c++11 -o CMakeFiles/global_mapper_tests.dir/test/gtest/gtest-all.cc.o -c /home/sangita/project_ws/AER1516/src/acl-mapping/global-mapper/global_mapper/test/gtest/gtest-all.cc",
+  "file": "/home/sangita/project_ws/AER1516/src/acl-mapping/global-mapper/global_mapper/test/gtest/gtest-all.cc"
+}
+]

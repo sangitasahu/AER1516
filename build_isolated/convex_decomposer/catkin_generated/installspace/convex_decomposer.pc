@@ -1,0 +1,8 @@
+prefix=/home/sangita/project_ws/AER1516/install_isolated
+
+Name: convex_decomposer
+Description: Description of convex_decomposer
+Version: 0.0.0
+Cflags: -I${prefix}/include
+Libs: -L${prefix}/lib 
+Requires: 
