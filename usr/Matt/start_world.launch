@@ -1,0 +1,24 @@
+<launch>
+	<arg name="quad" default="SQ01s"/>
+	<!-- Baseline world -->
+	<arg name="world_name" default="$(find acl_sim)/worlds/density01seed0.world"/>
+
+	<!-- Easier worlds-->
+	<!-- <arg name="world_name" default="$(find acl_sim)/worlds/dense_forest.world"/> -->
+	<!-- <arg name="world_name" default="$(find acl_sim)/worlds/small_forest.world"/> -->
+
+	<!-- Harder worlds-->
+	<!-- <arg name="world_name" default="$(find acl_sim)/worlds/density01seed2.world"/> -->
+	<!-- <arg name="world_name" default="$(find acl_sim)/worlds/density01seed4.world"/> -->
+	<!-- <arg name="world_name" default="$(find acl_sim)/worlds/office_with_ground.world"/> -->
+	<!-- <arg name="world_name" default="$(find acl_sim)/worlds/walls_and_cars.world"/> Too hard, turns are way too tight for JPS to be a good guide-->
+	<!-- <arg name="world_name" default="$(find acl_sim)/worlds/icra1.world"/> -->
+	<!-- <arg name="world_name" default="$(find acl_sim)/worlds/bugtrap14.world"/> -->
+	
+	<!-- We resume the logic in empty_world.launch, changing only the name of the world to be launched -->
+	<include file="$(find gazebo_ros)/launch/empty_world.launch">
+		<arg name="world_name" value="$(arg world_name)"/>
+	</include>
+
+
+</launch>

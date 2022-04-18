@@ -220,7 +220,7 @@ class LocalPlanner(object):
         # Solver is unstable when you're too close to the goal and camera isn't going to provide good images if you're not roughly pointed towards the goal
         self.goal_pos_tol = 2E-1
         self.goal_cp_tol = 1E-4
-        self.goal_FOV = 90*pi/180 # rad
+        self.goal_FOV = 120*pi/180 # rad
 
         self.reached_goal = False
         self.goal_in_view = False

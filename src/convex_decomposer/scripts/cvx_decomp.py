@@ -42,6 +42,8 @@ class cvx_decomp(object):
         # Declare Publishers and Subscibers
         self.point_cloud = '/SQ01s/global_mapper_ros/occupancy_grid1'
         self.path = '/SQ01s/faster/global_plan'
+        # self.point_cloud = 'grid_publisher'
+        # self.path = 'global_plan'
         self.point_cloud_sub = rospy.Subscriber(self.point_cloud,PointCloud,self.point_cloud_proc)
         self.path_sub = rospy.Subscriber(self.path,Path,self.path_processor)
         self.pub_CvxDecomp = rospy.Publisher('/CvxDecomp',CvxDecomp,queue_size=1)
@@ -68,7 +70,7 @@ class cvx_decomp(object):
         #############################################
         self.n_int_max = 6 #Does not do anything for now : plan to use it to limit the number of hyperplanes of the polyhedron
         self.offset_x = 0.1 #Offset of the ellipsoid around the segment
-        self.drone_radius = 0.1 # Radius of the drone for obstacle inflation 
+        self.drone_radius = 0.4 # Radius of the drone for obstacle inflation 
         self.bbox = [2,2,0.5]  # Local bounding box of the convex decomposer
         #############################################
         # Set the decomposer frequency
