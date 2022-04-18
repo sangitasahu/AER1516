@@ -41,5 +41,10 @@
 
 	<!-- Master Node -->
 	<include file="$(find master_node)/launch/start_master_node.launch" />
+	
+	<!-- Data Logging -->
+	<?ignore <node name="rosbag" pkg="rosbag" type="record"
+	args="record -o /home/$(env USER)/SLOWER -e '(.*)data(.*)|(.*)local_planner(.*)' 
+	/SQ01s/goal /SQ01s/state /global_plan /SQ01s/faster/global_plan /goal_loc /move_base_simple_goal" /> ?>
 
 </launch>

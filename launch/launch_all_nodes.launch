@@ -6,7 +6,7 @@
 	
 	<!-- Octomap Launch -->
 	<node pkg="octomap_server" type="octomap_server_node" name="octomap_server">
-		<param name="resolution" value="0.25" />
+		<param name="resolution" value="0.5" />
 		
 		<!-- fixed map frame (set to 'map' if SLAM or localization running!) -->
 		<param name="frame_id" type="string" value="vicon" />
@@ -31,9 +31,14 @@
 	<include file="$(find global_planner)/launch/start_global_planner.launch" />
 
 	<!-- Convex Decomposition -->
-	<!--include file="$(find convex_decomposer)/launch/start_convex_decomposition.launch" /-->
+	<include file="$(find convex_decomposer)/launch/start_convex_decomposition.launch" />
 
 	<!-- Local Planner -->
-	<!--include file="$(find local_planner)/launch/start_local_planner.launch" /-->
+	<include file="$(find local_planner)/launch/start_local_planner.launch" />
+
+	<!-- Data Logging -->
+	<?ignore <node name="rosbag" pkg="rosbag" type="record"
+	args="record -o /home/$(env USER)/SLOWER -e '(.*)data(.*)|(.*)local_planner(.*)' 
+	/SQ01s/goal /SQ01s/state /global_plan /SQ01s/faster/global_plan /goal_loc /move_base_simple_goal" /> ?>
 
 </launch>

@@ -28,8 +28,8 @@ class MasterNode(object):
 
         # Parameters
         # Flight Parameters
-        self.start_delay = 3 # s
-        self.start_x = 0    
+        self.start_delay = 5 # s
+        self.start_x = 0 
         self.start_y = 0
         self.start_z = 1
         self.start_yaw = 0
@@ -42,7 +42,7 @@ class MasterNode(object):
         # Goal Mode
         # 0 - Fixed goal location
         # 1 - Nav goal
-        self.goal_mode = 1
+        self.goal_mode = 0
         self.goal_fixed_x = 20
         self.goal_fixed_y = 20
         self.goal_fixed_z = self.flight_z
@@ -70,9 +70,9 @@ class MasterNode(object):
         # Subscribers
         self.state_topic = '/SQ01s/state'
         self.state_sub = rospy.Subscriber(self.state_topic,State,callback=self.state_sub_callback)
-        # self.glob_plan_topic = 'global_plan'
-        self.glob_plan_topic = '/SQ01s/faster/global_plan'
-        # self.glob_plan_sub = rospy.Subscriber(self.glob_plan_topic,Path,callback=self.glob_plan_sub_callback)
+        self.glob_plan_topic = 'global_plan'
+        # self.glob_plan_topic = '/SQ01s/faster/global_plan'
+        self.glob_plan_sub = rospy.Subscriber(self.glob_plan_topic,Path,callback=self.glob_plan_sub_callback)
         self.local_plan_goal_topic = '/local_planner/local_plan_goal'
         self.local_plan_goal_sub = rospy.Subscriber(self.local_plan_goal_topic,Goal,callback=self.local_plan_sub_callback)
 

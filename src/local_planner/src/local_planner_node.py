@@ -37,8 +37,8 @@ class LocalPlannerNode(object):
         # Subscribers
         self.state_topic = '/SQ01s/state'
         self.state_sub = rospy.Subscriber(self.state_topic,State,callback=self.state_sub_callback)
-        # self.glob_plan_topic = 'global_plan'
-        self.glob_plan_topic = '/SQ01s/faster/global_plan'
+        self.glob_plan_topic = 'global_plan'
+        # self.glob_plan_topic = '/SQ01s/faster/global_plan'
         self.glob_plan_sub = rospy.Subscriber(self.glob_plan_topic,Path,callback=self.glob_plan_sub_callback)
         self.cvx_decomp_topic = 'CvxDecomp'
         self.cvx_decomp_sub = rospy.Subscriber(self.cvx_decomp_topic,CvxDecomp,callback=self.cvx_decomp_sub_callback)
