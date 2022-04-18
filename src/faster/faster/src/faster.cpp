@@ -220,7 +220,10 @@ void Faster::replan(vec_Vecf<3>& JPS_whole_out,vec_E<Polyhedron<3>>& poly_whole_
   bool solvedjps = false;
   MyTimer timer_jps(true);
 
-  vec_Vecf<3> JPSk = jps_manager_.solveJPS3D(A.pos, G.pos, &solvedjps, 1);
+  //std::cout << "JPS starting from: (" << state_local.pos[0] << "),(" << state_local.pos[1] << "),(" << state_local.pos[2] << ")" << std::endl;
+
+  // vec_Vecf<3> JPSk = jps_manager_.solveJPS3D(A.pos, G.pos, &solvedjps, 1);
+  vec_Vecf<3> JPSk = jps_manager_.solveJPS3D(state_local.pos, G.pos, &solvedjps, 1);
 
   if (solvedjps == false)
   {

@@ -16,7 +16,7 @@ from cmath import pi
 
 # Import message types
 from nav_msgs.msg import Path
-from std_msgs.msg import UInt8, Header
+from std_msgs.msg import UInt8, Header, Float64
 from snapstack_msgs.msg import State, Goal
 from geometry_msgs.msg import Point, PointStamped, Vector3, Quaternion, PoseStamped
 from tf.transformations import euler_from_quaternion
@@ -31,9 +31,9 @@ class MasterNode(object):
         self.start_delay = 3 # s
         self.start_x = 0    
         self.start_y = 0
-        self.start_z = 0
+        self.start_z = 1
         self.start_yaw = 0
-        self.flight_z = 2 # m. Fly at constant height off the ground for simplicity
+        self.flight_z = 1 # m. Fly at constant height off the ground for simplicity
         self.takeoff_speed = 3 # m/s
 
         self.frame_id = "world"
@@ -41,8 +41,8 @@ class MasterNode(object):
         # Modes
         # Goal Mode
         # 0 - Fixed goal location
-        # 1 - Clicked point
-        self.goal_mode = 0
+        # 1 - Nav goal
+        self.goal_mode = 1
         self.goal_fixed_x = 20
         self.goal_fixed_y = 20
         self.goal_fixed_z = self.flight_z
@@ -58,8 +58,11 @@ class MasterNode(object):
         # 0 - Local planner
         # 1 - Global planner passthrough (for debugging)
         # 2 - Hold location (for debugging)
-        self.path_mode = 2
+        self.path_mode = 0
         self.global_plan_flight_speed = 1 # m/s
+
+        # Clicked point unstuck mode
+        self.enable_click_unstuck = 1
 
         # Rates
         self.goal_freq = 100 # Hz
@@ -67,14 +70,16 @@ class MasterNode(object):
         # Subscribers
         self.state_topic = '/SQ01s/state'
         self.state_sub = rospy.Subscriber(self.state_topic,State,callback=self.state_sub_callback)
-        self.glob_plan_topic = 'global_plan'
-        self.glob_plan_sub = rospy.Subscriber(self.glob_plan_topic,Path,callback=self.glob_plan_sub_callback)
-        self.local_plan_goal_topic = 'local_plan_goal'
+        # self.glob_plan_topic = 'global_plan'
+        self.glob_plan_topic = '/SQ01s/faster/global_plan'
+        # self.glob_plan_sub = rospy.Subscriber(self.glob_plan_topic,Path,callback=self.glob_plan_sub_callback)
+        self.local_plan_goal_topic = '/local_planner/local_plan_goal'
         self.local_plan_goal_sub = rospy.Subscriber(self.local_plan_goal_topic,Goal,callback=self.local_plan_sub_callback)
-        # self.clicked_point_topic = 'clicked_point'
-        # self.clicked_point_sub = rospy.Subscriber(self.clicked_point_topic,PointStamped,callback=self.clicked_point_sub_callback)
-        self.clicked_point_topic = '/move_base_simple/goal'
-        self.clicked_point_sub = rospy.Subscriber(self.clicked_point_topic,PoseStamped,callback=self.clicked_point_sub_callback)
+
+        self.clicked_point_topic = '/clicked_point'
+        self.clicked_point_sub = rospy.Subscriber(self.clicked_point_topic,PointStamped,callback=self.clicked_point_sub_callback)
+        self.nav_goal_topic = '/move_base_simple/goal'
+        self.nav_goal_sub = rospy.Subscriber(self.nav_goal_topic,PoseStamped,callback=self.nav_goal_sub_callback)
 
         # Publishers
         self.goal_topic = '/SQ01s/goal'
@@ -83,6 +88,10 @@ class MasterNode(object):
         self.goal_loc_pub = rospy.Publisher(self.goal_loc_topic,PointStamped,queue_size=10)
         self.master_node_state = 'master_node_state'
         self.master_state_pub = rospy.Publisher(self.master_node_state,MasterNodeState,queue_size=10)
+        self.path_length_topic = '/data/path_length'
+        self.path_length_pub = rospy.Publisher(self.path_length_topic,Float64,queue_size=10)
+        self.applied_vel_topic = '/data/applied_vel'
+        self.applied_vel_pub = rospy.Publisher(self.applied_vel_topic,Vector3,queue_size=10)
 
         # Timers
         self.update_goal_timer = rospy.Timer(rospy.Duration(1.0/self.goal_freq),self.update_goal_callback)
@@ -91,12 +100,15 @@ class MasterNode(object):
         # Inputs
         self.state = State()
         self.glob_plan = Path()
-        self.clicked_point = PoseStamped()
+        self.clicked_point = PointStamped()
+        self.nav_goal = PoseStamped()
         self.local_plan_goal = Goal()
 
         # State variables
         self.node_state = NodeState.IDLE
         self.received_point = False
+        self.received_nav_goal = False
+        self.received_first_nav_goal = False
         self.received_local_plan = False
         self.received_global_plan = False
         self.start_timer = 0
@@ -105,12 +117,22 @@ class MasterNode(object):
         self.goal_filt_z = self.start_z
         self.goal_filt_yaw = self.start_yaw
 
+        self.clicked_point_last_x = 0
+        self.clicked_point_last_y = 0
+        self.clicked_point_last_yaw = 0
+
         # Filter coefficients
         self.goal_filt_cutoff = 20 # Hz
         self.goal_filt_coef = (2*pi*self.goal_filt_cutoff/self.goal_freq)/(1+2*pi*self.goal_filt_cutoff/self.goal_freq)
         self.goal_filt_cutoff_global = 2 # Hz
         self.goal_filt_coef_global = (2*pi*self.goal_filt_cutoff_global/self.goal_freq)/(1+2*pi*self.goal_filt_cutoff_global/self.goal_freq)
         self.yaw_tol = 1E-12
+
+        # Data Logging
+        self.path_length = 0
+        self.applied_v_x = 0
+        self.applied_v_y = 0
+        self.applied_v_z = 0
 
     def state_sub_callback(self,msg):
         # TODO: May need to consider thread safety
@@ -125,6 +147,13 @@ class MasterNode(object):
         # TODO: May need to consider thread safety
         self.received_point = True
         self.clicked_point = msg
+
+    def nav_goal_sub_callback(self,msg):
+        # TODO: May need to consider thread safety
+        if not self.received_first_nav_goal:
+            self.received_first_nav_goal = True
+        self.received_nav_goal = True
+        self.nav_goal = msg
 
     def local_plan_sub_callback(self,msg):
         # TODO: May need to consider thread safety
@@ -180,9 +209,15 @@ class MasterNode(object):
             if self.received_local_plan:
                 goal_new = copy.deepcopy(self.local_plan_goal)
                 # print('I read local goal: [{:.2f},{:.2f},{:.2f}]'.format(goal_new.p.x,goal_new.p.y,goal_new.p.z))
-                self.goal_filt_x = self.goal_filt_coef*goal_new.p.x + (1-self.goal_filt_coef)*self.goal_filt_x
-                self.goal_filt_y = self.goal_filt_coef*goal_new.p.y + (1-self.goal_filt_coef)*self.goal_filt_y
-                self.goal_filt_z = self.goal_filt_coef*goal_new.p.z + (1-self.goal_filt_coef)*self.goal_filt_z
+                delta_x = self.goal_filt_coef*(goal_new.p.x-self.goal_filt_x)
+                delta_y = self.goal_filt_coef*(goal_new.p.y-self.goal_filt_y)
+                delta_z = self.goal_filt_coef*(goal_new.p.z-self.goal_filt_z)
+                # self.goal_filt_x = self.goal_filt_coef*goal_new.p.x + (1-self.goal_filt_coef)*self.goal_filt_x
+                # self.goal_filt_y = self.goal_filt_coef*goal_new.p.y + (1-self.goal_filt_coef)*self.goal_filt_y
+                # self.goal_filt_z = self.goal_filt_coef*goal_new.p.z + (1-self.goal_filt_coef)*self.goal_filt_z
+                self.goal_filt_x = self.goal_filt_x + delta_x
+                self.goal_filt_y = self.goal_filt_y + delta_y
+                self.goal_filt_z = self.goal_filt_z + delta_z
                 self.goal_filt_yaw = self.goal_filt_coef*goal_new.yaw + (1-self.goal_filt_coef)*self.goal_filt_yaw
                 goal_new.p.x = self.goal_filt_x
                 goal_new.p.y = self.goal_filt_y
@@ -192,6 +227,15 @@ class MasterNode(object):
 
                 # Publish new goal location
                 self.goal_pub.publish(goal_new)
+
+                # Data logging
+                self.applied_v_x = delta_x*self.goal_freq
+                self.applied_v_y = delta_y*self.goal_freq
+                self.applied_v_z = delta_z*self.goal_freq
+                self.path_length = self.path_length + np.sqrt(delta_x**2+delta_y**2+delta_z**2)
+
+                self.path_length_pub.publish(Float64(data=self.path_length))
+                self.applied_vel_pub.publish(Vector3(x = self.applied_v_x,y = self.applied_v_y,z = self.applied_v_z))
 
         elif self.node_state == NodeState.FLIGHT_GLOBAL:
             # Debugging mode to fly based on global planner only at a constant speed
@@ -275,17 +319,18 @@ class MasterNode(object):
                 goal_new.yaw = self.goal_filt_yaw
                 self.goal_pub.publish(goal_new)
         elif self.node_state == NodeState.FLIGHT_HOLD:
-            # Hold position at clicked point
-            if self.received_point:
+            # Hold position at nav goal
+            if self.received_nav_goal:
                 goal_new = Goal(header = Header(stamp=rospy.get_rostime(),frame_id = self.frame_id))
-                goal_new.p.x = self.clicked_point.pose.position.x
-                goal_new.p.y = self.clicked_point.pose.position.y
+                goal_new.p.x = self.nav_goal.pose.position.x
+                goal_new.p.y = self.nav_goal.pose.position.y
                 goal_new.p.z = self.flight_z
-                quat_clicked = [self.clicked_point.pose.orientation.x,self.clicked_point.pose.orientation.y,
-                            self.clicked_point.pose.orientation.z,self.clicked_point.pose.orientation.w]
+                quat_clicked = [self.nav_goal.pose.orientation.x,self.nav_goal.pose.orientation.y,
+                            self.nav_goal.pose.orientation.z,self.nav_goal.pose.orientation.w]
                 euler_clicked = euler_from_quaternion(quat_clicked,'rzyx')
                 goal_new.yaw = euler_clicked[0]
                 self.goal_pub.publish(goal_new)
+                self.received_nav_goal = False
 
         # Update global goal location for global planner
         if self.goal_mode == 0:
@@ -295,19 +340,45 @@ class MasterNode(object):
             self.goal_loc_pub.publish(goal_loc)
         else:
             # Clicked point control from RViz
-            if self.received_point:
-                # Update global goal with current clicked point value, held at target flight Z level
-                global_goal = PointStamped(header=Header(stamp=rospy.get_rostime(),frame_id = self.frame_id),
-                                    point = Point(x=self.clicked_point.pose.position.x,
-                                    y=self.clicked_point.pose.position.y,z=self.clicked_point.pose.position.z))
-                global_goal.point.z = self.flight_z
-                self.goal_loc_pub.publish(global_goal)
+            if self.received_first_nav_goal:
+                if self.received_nav_goal:
+                    # Update global goal with current clicked point value, held at target flight Z level
+                    global_goal = PointStamped(header=Header(stamp=rospy.get_rostime(),frame_id = self.frame_id),
+                                        point = Point(x=self.nav_goal.pose.position.x,
+                                        y=self.nav_goal.pose.position.y,z=self.nav_goal.pose.position.z))
+                    global_goal.point.z = self.flight_z
+                    self.goal_loc_pub.publish(global_goal)
+                    self.received_nav_goal = False
             else:
                 # Have not received clicked point value, hold at start position
                 global_goal = PointStamped(header=Header(stamp=rospy.get_rostime(),frame_id = self.frame_id),
                                     point = Point(x=self.start_x,y=self.start_y,z=self.flight_z))
                 self.goal_loc_pub.publish(global_goal)
         
+        if self.enable_click_unstuck:
+            if self.received_point:
+                # Override commanded position with clicked point in case get stuck
+                print("Unstucking")
+                goal_new = Goal()
+                goal_new.p.x = self.clicked_point.point.x
+                goal_new.p.y = self.clicked_point.point.y
+                goal_new.p.z = self.flight_z
+
+                dx = self.clicked_point.point.x-self.state.pos.x
+                dy = self.clicked_point.point.y-self.state.pos.x
+
+                if abs(dx)<self.yaw_tol and abs(dy)<self.yaw_tol:
+                    quat = [self.state.quat.x,self.state.quat.y,
+                            self.state.quat.z,self.state.quat.w]
+                    euler = euler_from_quaternion(quat,'rzyx')
+                    goal_new.yaw = euler[0]
+                else:
+                    goal_new.yaw = np.arctan2(dy,dx)
+                
+                self.goal_pub.publish(goal_new)
+
+                self.received_point = False
+
         # Publish master node state for reference by other components
         node_state = MasterNodeState(header=Header(stamp=rospy.get_rostime(),frame_id = self.frame_id),
                                      state = self.node_state)
