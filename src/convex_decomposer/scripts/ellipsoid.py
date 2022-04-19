@@ -41,13 +41,13 @@ def nearest_hyperplane(Cinv,d,obs):
 
 
 def find_ellipsoid(p1,p2,offset_x,obs,inflate_distance):
-    p1 = p1.astype(np.float)
-    p2 = p2.astype(np.float)
+    p1 = p1.astype(np.double)
+    p2 = p2.astype(np.double)
     eps_limit = 1e-8
     d = np.divide((p1+p2),2)
 
-    C =  np.linalg.norm(p1-p2)/2 * np.identity(3).astype(np.float)  
-    axes = np.linalg.norm(p1-p2)/2 + np.array([0,0,0]).astype(np.float)
+    C =  np.linalg.norm(p1-p2)/2 * np.identity(3).astype(np.double)  
+    axes = np.linalg.norm(p1-p2)/2 + np.array([0,0,0]).astype(np.double)
 #    print(p1 ,"to", p1)
     C[0,0] = C[0,0]+offset_x
     axes[0] = axes[0]+offset_x
@@ -77,7 +77,7 @@ def find_ellipsoid(p1,p2,offset_x,obs,inflate_distance):
 
     #return C,d,obs_inflated
     obs_inside_ = obs_inside
-    obs = np.asarray(obs_inflated).astype(np.float) # This obs is necessary to form our polyhedrons!
+    obs = np.asarray(obs_inflated).astype(np.double) # This obs is necessary to form our polyhedrons!
     #work on ellipsoid squishing only if obstacles that are inflated are inside the current sphere
     #So we work on the obs_inside list
     while (obs_inside!=[]):
@@ -86,14 +86,14 @@ def find_ellipsoid(p1,p2,offset_x,obs,inflate_distance):
         #print("pt in question:", pw)
         p=R.transpose().dot(pw-d)
         roll = np.arctan2(p[2],p[1])
-        Rf_ = quaternion_matrix([np.cos(roll/2),np.sin(roll/2),0,0])[0:3,0:3]
+        Rf_ = quaternion_matrix([0,np.cos(roll/2),np.sin(roll/2),0])[0:3,0:3]
         Rf = R.dot(Rf_)
         #print("Rf ", Rf)
         p = Rf.transpose().dot(pw-d)
         if (p[0]<axes[0]):
             axes[1] = np.abs(p[1]/np.sqrt(1-(p[0]/axes[0])**2))
         #form new ellipsoid
-        new_C = np.diag([axes[0],axes[1],axes[1]]).astype(np.float)
+        new_C = np.diag([axes[0],axes[1],axes[1]]).astype(np.double)
         #transform the new ellipsoid around segment 
         C = Rf.dot(new_C.dot(Rf.transpose()))
         obs_retain = []
@@ -119,7 +119,7 @@ def find_ellipsoid(p1,p2,offset_x,obs,inflate_distance):
         p=Rf.transpose().dot(pw-d)
         if (1-(p[0]/axes[0])**2 - (p[1]/axes[1])**2 > eps_limit):
             axes[2] = np.abs(p[2]/np.sqrt(1-(p[0]/axes[0])**2 - (p[1]/axes[1])**2))
-        new_C = np.diag(axes).astype(np.float)
+        new_C = np.diag(axes).astype(np.double)
         C = Rf.dot(new_C.dot(Rf.transpose()))
         obs_retain = []
         Cinv = np.linalg.inv(C)

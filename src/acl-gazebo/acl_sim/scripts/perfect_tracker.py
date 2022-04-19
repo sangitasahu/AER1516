@@ -115,6 +115,7 @@ class FakeSim:
 
 
         self.state.header.frame_id="world"
+        self.state.header.stamp = rospy.get_rostime()
         self.state.pos=data.p
         self.state.vel=data.v
         self.state.quat=gazebo_state.pose.orientation
