@@ -49,6 +49,7 @@ class cvx_decomp(object):
         self.angl_lim = rospy.get_param("~cvx/angle_lim") # angle below which planes have to be merged into one
         self.run_jps3d = rospy.get_param("~setup/use_jps3d")
         self.run_global_mapper = rospy.get_param("~setup/use_global_mapper_ros")
+        self.framw = rospy.get_param("~setup/use_global_mapper_ros")
         # Set the decomposer frequency
         self.loop_frequency = rospy.get_param("~cvx/freq")
 
@@ -59,7 +60,7 @@ class cvx_decomp(object):
         
 
         # Declare Publishers and Subscibers
-        self.point_cloud = "qccup_grid1"
+        self.point_cloud = "/occup_grid1"
         if self.run_global_mapper:
             self.point_cloud = "/SQ01s/global_mapper_ros/occupancy_grid1"
         

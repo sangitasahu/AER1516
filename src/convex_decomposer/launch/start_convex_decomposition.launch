@@ -1,11 +1,6 @@
 <launch>
-    <node name="cvx_decomp" 
-    pkg="convex_decomposer" 
-    type="cvx_decomp.py" 
-    output="screen">
+    <node name="cvx_decomp" pkg="convex_decomposer" type="cvx_decomp.py" output="screen" clear_params="true">
     <rosparam command="load" file="$(find master_node)/param/params.yaml"/>
-
     </node>
-
 </launch>
 
