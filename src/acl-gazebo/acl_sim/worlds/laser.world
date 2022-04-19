@@ -1,0 +1,262 @@
+<sdf version='1.5'>
+    <world name='default'>
+   <plugin name="disable_physics" filename="libdisable_physics.so"/>
+    <light name='sun' type='directional'>
+      <cast_shadows>0</cast_shadows>
+      <pose frame=''>0 0 10 0 -0 0</pose>
+      <diffuse>0.8 0.8 0.8 1</diffuse>
+      <specular>0.2 0.2 0.2 1</specular>
+      <attenuation>
+        <range>1000</range>
+        <constant>0.9</constant>
+        <linear>0.01</linear>
+        <quadratic>0.001</quadratic>
+      </attenuation>
+      <direction>-0.5 0.1 -0.9</direction>
+    </light>
+    <model name='ground_plane'>
+      <static>1</static>
+      <link name='link'>
+        <collision name='collision'>
+          <geometry>
+            <plane>
+              <normal>0 0 1</normal>
+              <size>200 200</size>
+            </plane>
+          </geometry>
+          <surface>
+            <friction>
+              <ode>
+                <mu>100</mu>
+                <mu2>50</mu2>
+              </ode>
+            </friction>
+            <contact>
+              <ode/>
+            </contact>
+            <bounce/>
+          </surface>
+          <max_contacts>10</max_contacts>
+        </collision>
+        <visual name='visual'>
+          <cast_shadows>0</cast_shadows>
+          <geometry>
+            <plane>
+              <normal>0 0 1</normal>
+              <size>200 200</size>
+            </plane>
+          </geometry>
+          <material>
+            <script>
+              <uri>file://media/materials/scripts/gazebo.material</uri>
+              <name>Gazebo/Grey</name>
+            </script>
+          </material>
+        </visual>
+        <self_collide>0</self_collide>
+        <kinematic>0</kinematic>
+        <gravity>1</gravity>
+      </link>
+    </model>
+    <physics name='default_physics' default='0' type='ode'>
+      <max_step_size>0.001</max_step_size>
+      <real_time_factor>1</real_time_factor>
+      <real_time_update_rate>1000</real_time_update_rate>
+      <gravity>0 0 -9.8</gravity>
+      <magnetic_field>5.5645e-06 2.28758e-05 -4.23884e-05</magnetic_field>
+    </physics>
+    <scene>
+      <ambient>0.4 0.4 0.4 1</ambient>
+      <background>0.7 0.7 0.7 1</background>
+      <shadows>0</shadows>
+    </scene>
+    <spherical_coordinates>
+      <surface_model>EARTH_WGS84</surface_model>
+      <latitude_deg>0</latitude_deg>
+      <longitude_deg>0</longitude_deg>
+      <elevation>0</elevation>
+      <heading_deg>0</heading_deg>
+    </spherical_coordinates>
+
+
+<!-- Testing the automatic population of objects -->
+    <population name="forest_pop">
+      <model name="forest">
+        <include>
+          <static>true</static>
+          <uri>/home/brett/acl_ws/src/acl_sim/models/cylinder</uri>
+        </include>
+       </model>
+      <pose>25 0 0 0 0 0</pose>
+      <box>
+        <size>50 20 0.01</size>
+      </box>
+      <model_count>100</model_count> 
+      <distribution>
+        <type>random</type>
+      </distribution>
+    </population>
+
+    <model name='LQ02s'>
+      <link name='base_link'>
+        <pose>0 0 0 0 -0 0</pose>
+        <inertial>
+          <pose>0 0 0.0108185 0 -0 0</pose>
+          <mass>1.747</mass>
+          <inertia>
+            <ixx>0.0129017</ixx>
+            <ixy>0</ixy>
+            <ixz>0</ixz>
+            <iyy>0.0129017</iyy>
+            <iyz>0</iyz>
+            <izz>0.021962</izz>
+          </inertia>
+        </inertial>
+        <collision name='base_link_collision'>
+          <pose>0 0 0 0 -0 0.785398</pose>
+          <geometry>
+            <mesh>
+              <scale>1 1 1</scale>
+              <uri>/home/brett/acl_ws/src/acl_sim/meshes/quadrotor/quadrotor_base_2.stl</uri>
+            </mesh>
+          </geometry>
+          <max_contacts>10</max_contacts>
+          <surface>
+            <contact>
+              <ode/>
+            </contact>
+            <bounce/>
+            <friction>
+              <ode/>
+            </friction>
+          </surface>
+        </collision>
+        <collision name='base_link_collision_base_link_1'>
+          <pose>0 0 0.0815 0 -0 0</pose>
+          <geometry>
+            <box>
+              <size>0.058 0.058 0.087</size>
+            </box>
+          </geometry>
+          <max_contacts>10</max_contacts>
+          <surface>
+            <contact>
+              <ode/>
+            </contact>
+            <bounce/>
+            <friction>
+              <ode/>
+            </friction>
+          </surface>
+        </collision>
+        <visual name='base_link_visual'>
+          <pose>0 0 0 0 -0 0</pose>
+          <geometry>
+            <mesh>
+              <scale>1 1 1</scale>
+              <uri>/home/brett/acl_ws/src/acl_sim/meshes/quadrotor/quadrotor_base_2.dae</uri>
+            </mesh>
+          </geometry>
+        </visual>
+        <visual name='base_link_visual_base_link_1'>
+          <pose>0 0 0.07 0 -0 0</pose>
+          <geometry>
+            <mesh>
+              <scale>1 1 1</scale>
+              <uri>/home/brett/acl_ws/src/acl_sim/meshes/hokuyo_utm30lx/hokuyo_utm_30lx.dae</uri>
+            </mesh>
+          </geometry>
+        </visual>
+        <velocity_decay/>
+        <sensor name='front_cam_camera_sensor' type='camera'>
+          <update_rate>10</update_rate>
+          <camera name='__default__'>
+            <horizontal_fov>1.5708</horizontal_fov>
+            <image>
+              <format>R8G8B8</format>
+              <width>320</width>
+              <height>240</height>
+            </image>
+            <clip>
+              <near>0.01</near>
+              <far>100</far>
+            </clip>
+          </camera>
+          <plugin name='front_cam_camera_controller' filename='libgazebo_ros_camera.so'>
+            <cameraName>front_cam</cameraName>
+            <imageTopicName>camera/image</imageTopicName>
+            <cameraInfoTopicName>camera/camera_info</cameraInfoTopicName>
+            <frameName>front_cam_optical_frame</frameName>
+            <robotNamespace>/</robotNamespace>
+          </plugin>
+          <pose>0.05 0 -0.06 0 -0 0</pose>
+        </sensor>
+        <gravity>1</gravity>
+        <velocity_decay/>
+        <self_collide>0</self_collide>
+        <sensor name='laser0' type='ray'>
+          <always_on>1</always_on>
+          <update_rate>40</update_rate>
+          <visualize>0</visualize>
+          <ray>
+            <scan>
+              <horizontal>
+                <samples>1081</samples>
+                <resolution>1</resolution>
+                <min_angle>-2.35619</min_angle>
+                <max_angle>2.35619</max_angle>
+              </horizontal>
+            </scan>
+            <range>
+              <min>0.2</min>
+              <max>30</max>
+              <resolution>0.01</resolution>
+            </range>
+            <noise>
+              <type>gaussian</type>
+              <mean>0</mean>
+              <stddev>0.004</stddev>
+            </noise>
+          </ray>
+          <plugin name='gazebo_ros_laser0_controller' filename='libgazebo_ros_laser.so'>
+            <topicName>scan</topicName>
+            <frameName>laser</frameName>
+            <robotNamespace>LQ02s</robotNamespace>
+          </plugin>
+          <pose>0 0 0.07 0 -0 0</pose>
+        </sensor>
+        <kinematic>0</kinematic>
+      </link>
+      <pose>0 0 0.3 0 -0 0</pose>
+    </model>
+    <state world_name='default'>
+      <sim_time>561 91000000</sim_time>
+      <real_time>567 843103529</real_time>
+      <wall_time>1487435021 731093152</wall_time>
+      <model name='LQ02s'>
+        <pose>-1.00405 0.003693 1.00383 0.017438 0.011134 9.1e-05</pose>
+        <link name='base_link'>
+          <pose>-1.00405 0.003693 1.00383 0.017438 0.011134 9.1e-05</pose>
+          <velocity>-0.009223 0.023025 -0.057558 0.028054 -0.027649 0.000121</velocity>
+          <acceleration>0 0 -9.8 -9.5e-05 5.29396e-23 0.00268</acceleration>
+          <wrench>0 0 -17.1206 0 -0 0</wrench>
+        </link>
+      </model>
+      <model name='ground_plane'>
+        <pose>0 0 0 0 -0 0</pose>
+        <link name='link'>
+          <pose>0 0 0 0 -0 0</pose>
+          <velocity>0 0 0 0 -0 0</velocity>
+          <acceleration>0 0 0 0 -0 0</acceleration>
+          <wrench>0 0 0 0 -0 0</wrench>
+        </link>
+      </model>
+    </state>
+    <gui fullscreen='0'>
+      <camera name='user_camera'>
+        <pose>-4.2792 -8.81823 7.62731 0 0.593798 1.1722</pose>
+        <view_controller>orbit</view_controller>
+      </camera>
+    </gui>
+  </world>
+</sdf>
