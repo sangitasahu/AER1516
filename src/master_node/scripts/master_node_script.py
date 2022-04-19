@@ -18,7 +18,7 @@ from cmath import pi
 from nav_msgs.msg import Path
 from std_msgs.msg import UInt8, Header, Float64
 from snapstack_msgs.msg import State, Goal
-from geometry_msgs.msg import Point, PointStamped, Vector3, Quaternion, PoseStamped
+from geometry_msgs.msg import Point, PointStamped, Vector3, Quaternion, Pose, PoseStamped
 from tf.transformations import euler_from_quaternion
 from master_node.msg import MasterNodeState
 
@@ -28,12 +28,12 @@ class MasterNode(object):
 
         # Parameters
         # Flight Parameters
-        self.start_delay = 5 # s
+        self.start_delay = 3 # s
         self.start_x = 0 
         self.start_y = 0
-        self.start_z = 1
+        self.start_z = 3
         self.start_yaw = 0
-        self.flight_z = 1 # m. Fly at constant height off the ground for simplicity
+        self.flight_z = 3 # m. Fly at constant height off the ground for simplicity
         self.takeoff_speed = 3 # m/s
 
         self.frame_id = "world"
@@ -59,7 +59,7 @@ class MasterNode(object):
         # 1 - Global planner passthrough (for debugging)
         # 2 - Hold location (for debugging)
         self.path_mode = 0
-        self.global_plan_flight_speed = 1 # m/s
+        self.global_plan_flight_speed = 0.25 # m/s
 
         # Clicked point unstuck mode
         self.enable_click_unstuck = 1
@@ -85,7 +85,7 @@ class MasterNode(object):
         self.goal_topic = '/SQ01s/goal'
         self.goal_pub = rospy.Publisher(self.goal_topic,Goal,queue_size=10)
         self.goal_loc_topic = 'goal_loc'
-        self.goal_loc_pub = rospy.Publisher(self.goal_loc_topic,PointStamped,queue_size=10)
+        self.goal_loc_pub = rospy.Publisher(self.goal_loc_topic,PoseStamped,queue_size=10)
         self.master_node_state = 'master_node_state'
         self.master_state_pub = rospy.Publisher(self.master_node_state,MasterNodeState,queue_size=10)
         self.path_length_topic = '/data/path_length'
@@ -335,24 +335,32 @@ class MasterNode(object):
         # Update global goal location for global planner
         if self.goal_mode == 0:
             # Constant goal location
-            goal_loc = PointStamped(header=Header(stamp=rospy.get_rostime(),frame_id = self.frame_id),
-                                    point = Point(x=self.goal_fixed_x,y=self.goal_fixed_y,z=self.goal_fixed_z))
+            # goal_loc = PointStamped(header=Header(stamp=rospy.get_rostime(),frame_id = self.frame_id),
+            #                         point = Point(x=self.goal_fixed_x,y=self.goal_fixed_y,z=self.goal_fixed_z))
+            goal_loc = PoseStamped(header=Header(stamp=rospy.get_rostime(),frame_id = self.frame_id))
+            goal_loc.pose = Pose(position = Point(x=self.goal_fixed_x,y=self.goal_fixed_y,z=self.goal_fixed_z),
+                                orientation = Quaternion(x = 0, y = 0, z = 0, w = 1))
             self.goal_loc_pub.publish(goal_loc)
         else:
             # Clicked point control from RViz
             if self.received_first_nav_goal:
                 if self.received_nav_goal:
                     # Update global goal with current clicked point value, held at target flight Z level
-                    global_goal = PointStamped(header=Header(stamp=rospy.get_rostime(),frame_id = self.frame_id),
-                                        point = Point(x=self.nav_goal.pose.position.x,
-                                        y=self.nav_goal.pose.position.y,z=self.nav_goal.pose.position.z))
-                    global_goal.point.z = self.flight_z
+                    # global_goal = PointStamped(header=Header(stamp=rospy.get_rostime(),frame_id = self.frame_id),
+                    #                     point = Point(x=self.nav_goal.pose.position.x,
+                    #                     y=self.nav_goal.pose.position.y,z=self.nav_goal.pose.position.z))
+                    global_goal = self.nav_goal
+                    global_goal.header = Header(stamp=rospy.get_rostime(),frame_id = self.frame_id)
+                    global_goal.pose.position.z = self.flight_z
                     self.goal_loc_pub.publish(global_goal)
                     self.received_nav_goal = False
             else:
                 # Have not received clicked point value, hold at start position
-                global_goal = PointStamped(header=Header(stamp=rospy.get_rostime(),frame_id = self.frame_id),
-                                    point = Point(x=self.start_x,y=self.start_y,z=self.flight_z))
+                # global_goal = PointStamped(header=Header(stamp=rospy.get_rostime(),frame_id = self.frame_id),
+                #                     point = Point(x=self.start_x,y=self.start_y,z=self.flight_z))
+                global_goal = PoseStamped(header=Header(stamp=rospy.get_rostime(),frame_id = self.frame_id))
+                global_goal.pose = Pose(position = Point(x=self.start_x,y=self.start_y,z=self.flight_z),
+                                orientation = Quaternion(x = 0, y = 0, z = 0, w = 1))
                 self.goal_loc_pub.publish(global_goal)
         
         if self.enable_click_unstuck:
