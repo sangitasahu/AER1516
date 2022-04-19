@@ -43,7 +43,7 @@ class LocalPlannerNode(object):
         self.cvx_decomp_topic = 'CvxDecomp'
         self.cvx_decomp_sub = rospy.Subscriber(self.cvx_decomp_topic,CvxDecomp,callback=self.cvx_decomp_sub_callback)
         self.global_goal_topic = 'goal_loc'
-        self.global_goal_sub = rospy.Subscriber(self.global_goal_topic,PointStamped,callback=self.global_goal_sub_callback)
+        self.global_goal_sub = rospy.Subscriber(self.global_goal_topic,PoseStamped,callback=self.global_goal_sub_callback)
         self.master_node_state_topic = 'master_node_state'
         self.master_node_state_sub = rospy.Subscriber(self.master_node_state_topic,MasterNodeState,callback=self.master_node_state_sub_callback)
 

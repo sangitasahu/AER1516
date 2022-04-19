@@ -37,7 +37,7 @@ class LocalPlanner(object):
         self.state = State()
         self.glob_plan = Path()
         self.cvx_decomp = CvxDecomp()
-        self.global_goal = PointStamped()
+        self.global_goal = PoseStamped()
         self.master_node_state = MasterNodeState()
 
         # Flags for inputs being initialized
@@ -72,19 +72,19 @@ class LocalPlanner(object):
         self.trajectory_lock = threading.Lock()
 
         # Vehicle limits
-        self.v_max = 3.0 # m/s
-        self.a_max = 10.0 # m/s2
-        self.j_max = 50.0 # m/s3
+        self.v_max = rospy.get_param("/local_planner/local_v_max") # m/s
+        self.a_max = rospy.get_param("/local_planner/local_a_max") # m/s2
+        self.j_max = rospy.get_param("/local_planner/local_j_max") # m/s3
 
         # Path parameterization
         self.spline_deg = 3
-        self.n_seg = 10
+        self.n_seg = rospy.get_param("/local_planner/n_seg")
         self.n_cp = self.spline_deg+1
 
         # Optimizer parameters
         self.coll_M = 1000 # Collision constraint upper bound
-        self.n_int_max = 5 # Maximum number of JPS intervals
-        self.n_plane_max = 8 # Maximum number of polyhedron planes per interval
+        self.n_int_max = rospy.get_param("/local_planner/n_int_max") # Maximum number of JPS intervals
+        self.n_plane_max = rospy.get_param("/local_planner/n_plane_max") # Maximum number of polyhedron planes per interval
         self.log_settings = mosek.streamtype.wrn # Detail level of output
         self.set_var_names = True # Label variable names or not. Performance is allegedly faster without
 
@@ -220,7 +220,7 @@ class LocalPlanner(object):
         # Solver is unstable when you're too close to the goal and camera isn't going to provide good images if you're not roughly pointed towards the goal
         self.goal_pos_tol = 2E-1
         self.goal_cp_tol = 1E-4
-        self.goal_FOV = 120*pi/180 # rad
+        self.goal_FOV = rospy.get_param("/local_planner/goal_FOV")*pi/180 # rad
 
         self.reached_goal = False
         self.goal_in_view = False
@@ -630,19 +630,19 @@ class LocalPlanner(object):
         cvx_decomp = copy.deepcopy(self.cvx_decomp)
 
         # See if we've reached the goal within tolerance. If so don't need to keep planning, solver can be unstable and yaw angle can go crazy
-        d_goal = np.sqrt((state_start.pos.x - self.global_goal.point.x)**2 +
-                          (state_start.pos.y - self.global_goal.point.y)**2 +
-                          (state_start.pos.z - self.global_goal.point.z)**2)
-        d_goal_cp = np.sqrt((self.cp_p_comm[3*self.n_cp*(self.n_seg-1)+(self.n_cp-1)] - self.global_goal.point.x)**2 +
-                          (self.cp_p_comm[3*self.n_cp*(self.n_seg-1)+(2*self.n_cp-1)] - self.global_goal.point.y)**2 +
-                          (self.cp_p_comm[3*self.n_cp*(self.n_seg-1)+(3*self.n_cp-1)] - self.global_goal.point.z)**2)
+        d_goal = np.sqrt((state_start.pos.x - self.global_goal.pose.position.x)**2 +
+                          (state_start.pos.y - self.global_goal.pose.position.y)**2 +
+                          (state_start.pos.z - self.global_goal.pose.position.z)**2)
+        d_goal_cp = np.sqrt((self.cp_p_comm[3*self.n_cp*(self.n_seg-1)+(self.n_cp-1)] - self.global_goal.pose.position.x)**2 +
+                          (self.cp_p_comm[3*self.n_cp*(self.n_seg-1)+(2*self.n_cp-1)] - self.global_goal.pose.position.y)**2 +
+                          (self.cp_p_comm[3*self.n_cp*(self.n_seg-1)+(3*self.n_cp-1)] - self.global_goal.pose.position.z)**2)
         self.reached_goal = d_goal < self.goal_pos_tol and d_goal_cp < self.goal_cp_tol
 
         if self.reached_goal:
             return
 
         # Check if we can see goal within tolerance. Stop come to a stop and rotate until we can see goal
-        heading_goal = np.arctan2(self.global_goal.point.y-state_start.pos.y,self.global_goal.point.x-state_start.pos.x)
+        heading_goal = np.arctan2(self.global_goal.pose.position.y-state_start.pos.y,self.global_goal.pose.position.x-state_start.pos.x)
         quat_quad = [state_start.quat.x,state_start.quat.y,state_start.quat.z,state_start.quat.w]
         euler_quad = euler_from_quaternion(quat_quad,'rzyx')
         self.goal_in_view = np.abs(heading_goal - euler_quad[0])<(self.goal_FOV/2)
@@ -1138,7 +1138,7 @@ class LocalPlanner(object):
             goal_new.yaw = self.yaw_filt_val
         elif not self.goal_in_view:
             # Rotate yaw angle towards goal
-            heading_goal = np.arctan2(self.global_goal.point.y-state_start.pos.y,self.global_goal.point.x-state_start.pos.x)
+            heading_goal = np.arctan2(self.global_goal.pose.position.y-state_start.pos.y,self.global_goal.pose.position.x-state_start.pos.x)
             # quat_quad = [state_start.quat.x,state_start.quat.y,state_start.quat.z,state_start.quat.w]
             # euler_quad = euler_from_quaternion(quat_quad,'rzyx')
             delta_yaw = heading_goal - self.yaw_filt_val
