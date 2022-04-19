@@ -52,20 +52,21 @@ private:
              const sensor_msgs::PointCloud2::ConstPtr& pcl2ptr_msg2);  // Callback for the occupancy pcloud
   void unkCB(const sensor_msgs::PointCloud2ConstPtr& pcl2ptr_msg);     // Callback for the unkown pcloud
   void pclCB(const sensor_msgs::PointCloud2ConstPtr& pcl2ptr_msg);
-  void frontierCB(const sensor_msgs::PointCloud2ConstPtr& pcl2ptr_msg);
+  //void frontierCB(const sensor_msgs::PointCloud2ConstPtr& pcl2ptr_msg);
 
-  void updateInitialCond(int i);
+  //void updateInitialCond(int i);
   void publishJPSPath(vec_Vecf<3>& path);
 
   Eigen::Vector3d projectClickedGoal(Eigen::Vector3d& P1);
   void createMoreVertexes(vec_Vecf<3>& path, double d);
 
-  void publishPoly(const vec_E<Polyhedron<3>>& poly);
+  void publishPoly(const vec_E<Polyhedron<3>>& poly,const vec_E<Ellipsoid<3>>& Ellips);
 
   std::string world_name_ = "world";
 
   ros::NodeHandle nh_;
   ros::Publisher poly_whole_pub_;
+  ros::Publisher ellip_whole_pub_;
   ros::Publisher pub_global_plan;
 
   // ros::Publisher cvx_decomp_poly_uo_pub_;
@@ -88,6 +89,6 @@ private:
   typedef message_filters::Synchronizer<MySyncPolicy> Sync;
   boost::shared_ptr<Sync> sync_;
 
-  int actual_trajID_ = 0;
+  //int actual_trajID_ = 0;
   // faster_msgs::Mode mode_;
 };

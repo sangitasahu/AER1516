@@ -166,7 +166,7 @@ bool Faster::initialized()
   return true;
 }
 
-void Faster::replan(vec_Vecf<3>& JPS_whole_out,vec_E<Polyhedron<3>>& poly_whole_out)
+void Faster::replan(vec_Vecf<3>& JPS_whole_out,vec_E<Polyhedron<3>>& poly_whole_out, vec_E<Ellipsoid<3>>& Ellips_whole_out)
 {
   MyTimer replanCB_t(true);
   if (initializedAllExceptPlanner() == false)
@@ -251,7 +251,7 @@ void Faster::replan(vec_Vecf<3>& JPS_whole_out,vec_E<Polyhedron<3>>& poly_whole_
   E.pos = JPS_whole[JPS_whole.size() - 1];
     // Convex Decomp around JPS_whole
   MyTimer cvx_ellip_decomp_t(true);
-  jps_manager_.cvxEllipsoidDecomp(JPS_whole, OCCUPIED_SPACE, l_constraints_whole_, poly_whole_out);
+  jps_manager_.cvxEllipsoidDecomp(JPS_whole, OCCUPIED_SPACE, l_constraints_whole_, poly_whole_out, Ellips_whole_out);
   // Check if G is inside poly_whole
   bool isGinside_whole = l_constraints_whole_[l_constraints_whole_.size() - 1].inside(G.pos);
   E.pos = (isGinside_whole == true) ? G.pos : E.pos;

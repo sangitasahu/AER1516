@@ -43,7 +43,7 @@ public:
 
   // Convex Decomposition
   void cvxEllipsoidDecomp(vec_Vecf<3>& path, int type_space, std::vector<LinearConstraint3D>& l_constraints,
-                          vec_E<Polyhedron<3>>& poly_out);
+                          vec_E<Polyhedron<3>>& poly_out,vec_E<Ellipsoid<3>>& Ellips_);
 
   void setResolution(double res);
   void setFactorJPS(double factor_jps);

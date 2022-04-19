@@ -78,7 +78,7 @@ void JPS_Manager::setDroneRadius(double drone_radius)
 }
 
 void JPS_Manager::cvxEllipsoidDecomp(vec_Vecf<3>& path, int type_space, std::vector<LinearConstraint3D>& l_constraints,
-                                     vec_E<Polyhedron<3>>& poly_out)
+                                     vec_E<Polyhedron<3>>& poly_out,vec_E<Ellipsoid<3>>& Ellips_)
 {
   /*  if (takeoff_done_ == false)
     {
@@ -107,6 +107,8 @@ void JPS_Manager::cvxEllipsoidDecomp(vec_Vecf<3>& path, int type_space, std::vec
   // Convert to inequality constraints Ax < b
   // std::vector<polytope> polytopes;
   auto polys = ellip_decomp_util_.get_polyhedrons();
+  Ellips_ = ellip_decomp_util_.get_ellipsoids();
+
 
   l_constraints.clear();
 

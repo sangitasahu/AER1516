@@ -120,6 +120,7 @@ FasterRos::FasterRos(ros::NodeHandle nh) : nh_(nh)
 
   // Publishers
   poly_whole_pub_ = nh.advertise<decomp_ros_msgs::PolyhedronArray>("poly_whole", 1, true);
+  ellip_whole_pub_ = nh.advertise<decomp_ros_msgs::EllipsoidArray>("Ellip_whole", 1, true);
   pub_global_plan = nh_.advertise<nav_msgs::Path>("global_plan", 1);
 
   // Subscribers
@@ -138,16 +139,23 @@ void FasterRos::replanCB(const ros::TimerEvent& e){
   {
     vec_Vecf<3> JPS_whole;
     vec_E<Polyhedron<3>> poly_whole;
-    faster_ptr_->replan(JPS_whole,poly_whole);
+    vec_E<Ellipsoid<3>> ellips_whole;
+
+    faster_ptr_->replan(JPS_whole,poly_whole,ellips_whole);
     publishJPSPath(JPS_whole); //Vandan Added this
-    publishPoly(poly_whole);
+    publishPoly(poly_whole,ellips_whole);
+    
   }
 }
-void FasterRos::publishPoly(const vec_E<Polyhedron<3>>& poly){
+void FasterRos::publishPoly(const vec_E<Polyhedron<3>>& poly,const vec_E<Ellipsoid<3>>& Ellips){
   // std::cout << "Going to publish= " << (poly[0].hyperplanes())[0].n_ << std::endl;
   decomp_ros_msgs::PolyhedronArray poly_msg = DecompROS::polyhedron_array_to_ros(poly);
   poly_msg.header.frame_id = world_name_;
   poly_whole_pub_.publish(poly_msg);
+  decomp_ros_msgs::EllipsoidArray ellip_msg = DecompROS::ellipsoid_array_to_ros(Ellips);
+  ellip_msg.header.frame_id = world_name_;
+  ellip_whole_pub_.publish(ellip_msg);
+  
 }
 void FasterRos::stateCB(const snapstack_msgs::State& msg){
   state state_tmp;
