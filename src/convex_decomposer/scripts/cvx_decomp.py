@@ -39,9 +39,35 @@ class cvx_decomp(object):
     the : MRSL Decomputil Library v1.0 :https://github.com/sikang/DecompUtil : http://ieeexplore.ieee.org/document/7839930/
     """
     def __init__(self):
+
+        #Get params:
+        #############################################
+        self.n_int_max = 6 #Does not do anything for now : plan to use it to limit the number of hyperplanes of the polyhedron
+        self.offset_x = rospy.get_param("~cvx/offset_x") #Offset of the ellipsoid around the segment
+        self.drone_radius =  rospy.get_param("~cvx/drone_radius") # Radius of the drone for obstacle inflation 
+        self.bbox = rospy.get_param("~cvx/bbox") # [2,2,1]  # Local bounding box of the convex decomposer
+        self.angl_lim = rospy.get_param("~cvx/angle_lim") # angle below which planes have to be merged into one
+        self.run_jps3d = rospy.get_param("~setup/use_jps3d")
+        self.run_global_mapper = rospy.get_param("~setup/use_global_mapper_ros")
+        # Set the decomposer frequency
+        self.loop_frequency = rospy.get_param("~cvx/freq")
+
+        if np.linalg.norm(np.array(self.bbox)) == 0:
+            rospy.logwarn('Bounding Box requirement set to [0,0,0]')
+            
+        #############################################
+        
+
         # Declare Publishers and Subscibers
-        self.point_cloud = '/occup_grid1'
+        self.point_cloud = "qccup_grid1"
+        if self.run_global_mapper:
+            self.point_cloud = "/SQ01s/global_mapper_ros/occupancy_grid1"
+        
         self.path = '/global_plan'
+        if self.run_jps3d:
+            self.path = 'SQ01s/faster/global_plan'
+        
+        
         self.point_cloud_sub = rospy.Subscriber(self.point_cloud,PointCloud,self.point_cloud_proc)
         self.path_sub = rospy.Subscriber(self.path,Path,self.path_processor)
         self.pub_CvxDecomp = rospy.Publisher('/CvxDecomp',CvxDecomp,queue_size=1)
@@ -65,18 +91,7 @@ class cvx_decomp(object):
         self.obs_cloud = [] #Change to pc if necessary
         self.p = [] # placeholder for holding the end points of the segment in question
         self.path_list = [] #Placeholder for the path poses
-        #############################################
-        self.n_int_max = 6 #Does not do anything for now : plan to use it to limit the number of hyperplanes of the polyhedron
-        self.offset_x = rospy.get_param("/cvx_decomp/offset_x") #Offset of the ellipsoid around the segment
-        self.drone_radius =  rospy.get_param("/cvx_decomp/drone_radius") # Radius of the drone for obstacle inflation 
-        self.bbox = rospy.get_param("/cvx_decomp/bbox") # [2,2,1]  # Local bounding box of the convex decomposer
-        self.angl_lim = rospy.get_param("/cvx_decomp/angle_lim") # angle below which planes have to be merged into one
-
-        if np.linalg.norm(np.array(self.bbox)) == 0:
-            rospy.logwarn('Bounding Box requirement set to [0,0,0]')
-        #############################################
-        # Set the decomposer frequency
-        self.loop_frequency = 50
+        
         # Run this ROS node at the loop frequency
         self.timers = rospy.Timer(rospy.Duration(1.0 / self.loop_frequency), self.decompose_points)
 

@@ -93,7 +93,7 @@ def find_ellipsoid(p1,p2,offset_x,obs,inflate_distance):
         if (p[0]<axes[0]):
             axes[1] = np.abs(p[1]/np.sqrt(1-(p[0]/axes[0])**2))
         #form new ellipsoid
-        new_C = np.diag([axes[0],axes[1],axes[1]])
+        new_C = np.diag([axes[0],axes[1],axes[1]]).astype(np.float)
         #transform the new ellipsoid around segment 
         C = Rf.dot(new_C.dot(Rf.transpose()))
         obs_retain = []
@@ -119,7 +119,7 @@ def find_ellipsoid(p1,p2,offset_x,obs,inflate_distance):
         p=Rf.transpose().dot(pw-d)
         if (1-(p[0]/axes[0])**2 - (p[1]/axes[1])**2 > eps_limit):
             axes[2] = np.abs(p[2]/np.sqrt(1-(p[0]/axes[0])**2 - (p[1]/axes[1])**2))
-        new_C = np.diag(axes)
+        new_C = np.diag(axes).astype(np.float)
         C = Rf.dot(new_C.dot(Rf.transpose()))
         obs_retain = []
         Cinv = np.linalg.inv(C)
