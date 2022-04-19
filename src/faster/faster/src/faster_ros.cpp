@@ -60,8 +60,10 @@ FasterRos::FasterRos(ros::NodeHandle nh) : nh_(nh)
 
   // And now obtain the parameters from the mapper
   std::vector<double> world_dimensions;
-  safeGetParam(nh_, "mapper/world_dimensions", world_dimensions);
-  safeGetParam(nh_, "mapper/resolution", par_.res);
+  safeGetParam(nh_, "world_dimensions", world_dimensions);
+  safeGetParam(nh_, "resolution", par_.res);
+  
+  safeGetParam(nh_, "setup/jps_3d_on_goal_loc", par_.pub_goal_set_name);
 
   par_.wdx = world_dimensions[0];
   par_.wdy = world_dimensions[1];
@@ -123,12 +125,19 @@ FasterRos::FasterRos(ros::NodeHandle nh) : nh_(nh)
   ellip_whole_pub_ = nh.advertise<decomp_ros_msgs::EllipsoidArray>("Ellip_whole", 1, true);
   pub_global_plan = nh_.advertise<nav_msgs::Path>("global_plan", 1);
 
+
+
   // Subscribers
   occup_grid_sub_.subscribe(nh_, "/occup_grid", 1);
   unknown_grid_sub_.subscribe(nh_, "/unknown_grid", 1);
   sync_.reset(new Sync(MySyncPolicy(1), occup_grid_sub_, unknown_grid_sub_));
   sync_->registerCallback(boost::bind(&FasterRos::mapCB, this, _1, _2));
-  sub_goal_ = nh_.subscribe("term_goal", 1, &FasterRos::terminalGoalCB, this);
+  sub_goal_ = nh_.subscribe("/move_base_simple/goal", 1, &FasterRos::terminalGoalCB, this);
+    if (par_.pub_goal_set_name == true)
+  {
+    sub_goal_ = nh_.subscribe("/goal_loc", 1, &FasterRos::terminalGoalCB, this);
+  }
+
   sub_state_ = nh_.subscribe("state", 1, &FasterRos::stateCB, this);
   // Timers
   replanCBTimer_ = nh_.createTimer(ros::Duration(par_.dc), &FasterRos::replanCB, this);

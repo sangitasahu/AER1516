@@ -3,8 +3,9 @@
     pkg="convex_decomposer" 
     type="cvx_decomp.py" 
     output="screen">
-    <rosparam command="load" file="$(find convex_decomposer)/param/cvx_params.yaml" />
+    <rosparam command="load" file="$(find master_node)/param/params.yaml"/>
 
     </node>
 
 </launch>
+
