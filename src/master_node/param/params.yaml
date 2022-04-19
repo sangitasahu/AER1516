@@ -6,6 +6,23 @@ setup:
   use_global_mapper_ros: true
   jps_3d_on_goal_loc: false # False makes jps3d to be on 2DPose click to go mode
 
+# Master Node Params
+master:
+  start_x: 0 # Start position
+  start_y: 0
+  start_z: 1
+  start_yaw: 0
+  start_delay: 5 # [s]
+
+  flight_z: 1 # Flight height [m]
+
+  goal_x: 15 # Goal location if using static goal location [m]
+  goal_y: 15
+  goal_z: 1
+
+  goal_mode: 0 # 0 = Static goal location, 1 = 2D nav goal from RViz
+  path_mode: 0 # 0 = local planner, 1 = global planner passthrough, 2 = hold location
+  global_plan_v: 0.25 # Flight speed for global planner mode [m/s]
 
 # Mapper Params
 mapr:
@@ -31,9 +48,17 @@ cvx: #This helps you call it in the get_param : call it as rospy.get_param("~cvx
 
 # Local Planner Params
 lp:
-  blah: 0
-  blah2: 0
-  blah3: 0
+  freq: 10 # Local replan rate [Hz]
+
+  v_max: 3.0 # Speed constraint in local plan [m/s]
+  a_max: 10.0 # Acceleration constraint in local plan [m/s2]
+  j_max: 50.0 # Jerk constraint in local plan [m/s3]
+
+  n_seg: 10  # Number of cubic spline segments in local plan trajectory
+  n_int_max: 5 # Maximum number of JPS intervals/polyhedra considered
+  n_plane_max: 8 # Maximum number of polyhedron planes considered per interval
+
+  goal_FOV: 120 # FOV angle local planner will keep goal location within [deg]
 
 
 
@@ -43,7 +68,7 @@ lp:
 global_frame: world
 origin: [0.0, 0.0, 0.0]  # [m]
 world_dimensions: [20.0, 20.0, 4.0]  # [m]  16   16   4
-resolution: 0.25  # [m]   0.15
+resolution: 0.15  # [m]   0.15
 radius_drone: 1.0 # [m] This should be higher than the resolutions
 Ra: 10.0 # [m] radius of the first sphere (Sa) in the planner. The unknown pcloud published will only contain points inside this sphere
 z_ground: 0.1 #[m] points below z_ground are not published in the known grid

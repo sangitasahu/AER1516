@@ -28,12 +28,12 @@ class MasterNode(object):
 
         # Parameters
         # Flight Parameters
-        self.start_delay = 3 # s
-        self.start_x = 0 
-        self.start_y = 0
-        self.start_z = 3
-        self.start_yaw = 0
-        self.flight_z = 3 # m. Fly at constant height off the ground for simplicity
+        self.start_delay = rospy.get_param("~master/start_delay") # s
+        self.start_x = rospy.get_param("~master/start_x")
+        self.start_y = rospy.get_param("~master/start_y")
+        self.start_z = rospy.get_param("~master/start_z")
+        self.start_yaw = rospy.get_param("~master/start_yaw")
+        self.flight_z = rospy.get_param("~master/flight_z") # m. Fly at constant height off the ground for simplicity
         self.takeoff_speed = 3 # m/s
 
         self.frame_id = "world"
@@ -42,36 +42,34 @@ class MasterNode(object):
         # Goal Mode
         # 0 - Fixed goal location
         # 1 - Nav goal
-        self.goal_mode = 0
-        self.goal_fixed_x = 20
-        self.goal_fixed_y = 20
-        self.goal_fixed_z = self.flight_z
+        self.goal_mode = rospy.get_param("~master/goal_mode")
+        self.goal_fixed_x = rospy.get_param("~master/goal_x")
+        self.goal_fixed_y = rospy.get_param("~master/goal_y")
+        self.goal_fixed_z = rospy.get_param("~master/goal_z")
         self.goal_yaw = 0
-
-        # For use with fake global planner
-        # fake_goal = [25.346839904785156, 21.625633239746094, 2]
-        # self.goal_fixed_x = fake_goal[0]
-        # self.goal_fixed_y = fake_goal[1]
-        # self.goal_fixed_z = fake_goal[2]
 
         # Path mode
         # 0 - Local planner
         # 1 - Global planner passthrough (for debugging)
         # 2 - Hold location (for debugging)
-        self.path_mode = 0
-        self.global_plan_flight_speed = 0.25 # m/s
+        self.path_mode = rospy.get_param("~master/path_mode")
+        self.global_plan_flight_speed = rospy.get_param("~master/global_plan_v") # m/s
 
         # Clicked point unstuck mode
-        self.enable_click_unstuck = 1
+        self.enable_click_unstuck = 0
 
         # Rates
         self.goal_freq = 100 # Hz
 
+        use_JPS3D = rospy.get_param("~setup/use_jps3d")
+
         # Subscribers
         self.state_topic = '/SQ01s/state'
         self.state_sub = rospy.Subscriber(self.state_topic,State,callback=self.state_sub_callback)
-        self.glob_plan_topic = 'global_plan'
-        # self.glob_plan_topic = '/SQ01s/faster/global_plan'
+        if use_JPS3D:
+            self.glob_plan_topic = '/SQ01s/faster/global_plan'
+        else:
+            self.glob_plan_topic = 'global_plan'
         self.glob_plan_sub = rospy.Subscriber(self.glob_plan_topic,Path,callback=self.glob_plan_sub_callback)
         self.local_plan_goal_topic = '/local_planner/local_plan_goal'
         self.local_plan_goal_sub = rospy.Subscriber(self.local_plan_goal_topic,Goal,callback=self.local_plan_sub_callback)

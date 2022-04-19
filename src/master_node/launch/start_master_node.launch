@@ -1,6 +1,7 @@
 <launch>
 	
 	<!-- Master Node -->
-	<node name="master_node" pkg="master_node" type="master_node_script.py" output="screen"/>
+	<node name="master_node" pkg="master_node" type="master_node_script.py" output="screen" clear_params="true">
+	<rosparam command="load" file="$(find master_node)/param/params.yaml"/> </node>
 
 </launch>

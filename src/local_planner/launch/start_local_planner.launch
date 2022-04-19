@@ -1,6 +1,7 @@
 <launch>
 	
 	<!-- Local Planner -->
-	<node name="local_planner" pkg="local_planner" type="local_planner_node.py" output="screen"/>
+	<node name="local_planner" pkg="local_planner" type="local_planner_node.py" output="screen" clear_params="true">
+	<rosparam command="load" file="$(find master_node)/param/params.yaml"/> </node>
 
 </launch>

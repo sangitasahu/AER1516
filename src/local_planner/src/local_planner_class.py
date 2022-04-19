@@ -72,19 +72,19 @@ class LocalPlanner(object):
         self.trajectory_lock = threading.Lock()
 
         # Vehicle limits
-        self.v_max = 3.0 # m/s
-        self.a_max = 10.0 # m/s2
-        self.j_max = 50.0 # m/s3
+        self.v_max = rospy.get_param("~lp/v_max") # m/s
+        self.a_max = rospy.get_param("~lp/a_max") # m/s2
+        self.j_max = rospy.get_param("~lp/j_max") # m/s3
 
         # Path parameterization
         self.spline_deg = 3
-        self.n_seg = 10
+        self.n_seg = rospy.get_param("~lp/n_seg")
         self.n_cp = self.spline_deg+1
 
         # Optimizer parameters
         self.coll_M = 1000 # Collision constraint upper bound
-        self.n_int_max = 5 # Maximum number of JPS intervals
-        self.n_plane_max = 8 # Maximum number of polyhedron planes per interval
+        self.n_int_max = rospy.get_param("~lp/n_int_max") # Maximum number of JPS intervals
+        self.n_plane_max = rospy.get_param("~lp/n_plane_max") # Maximum number of polyhedron planes per interval
         self.log_settings = mosek.streamtype.wrn # Detail level of output
         self.set_var_names = True # Label variable names or not. Performance is allegedly faster without
 
@@ -220,7 +220,7 @@ class LocalPlanner(object):
         # Solver is unstable when you're too close to the goal and camera isn't going to provide good images if you're not roughly pointed towards the goal
         self.goal_pos_tol = 2E-1
         self.goal_cp_tol = 1E-4
-        self.goal_FOV = 120*pi/180 # rad
+        self.goal_FOV = rospy.get_param("~lp/goal_FOV")*pi/180 # rad
 
         self.reached_goal = False
         self.goal_in_view = False
