@@ -10,9 +10,9 @@ setup:
 master:
   start_x: 0 # Start position
   start_y: 0
-  start_z: 1
+  start_z: 0
   start_yaw: 0
-  start_delay: 5 # [s]
+  start_delay: 3 # [s] before takeoff
 
   flight_z: 1 # Flight height [m]
 
