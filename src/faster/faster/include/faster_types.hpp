@@ -67,6 +67,7 @@ struct parameters
 
   double goal_height;
   bool force_goal_height;
+  bool pub_goal_set_name;
 
   /*  double kw;
     double kyaw;
