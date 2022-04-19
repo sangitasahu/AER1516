@@ -4,7 +4,7 @@
   <arg name="quad" default="SQ01s"/>
 
   <arg name="load_params" default="true" />
-  <arg name="param_file" default="global_mapper.yaml" />
+  <arg name="param_file" default="params.yaml" />
 
   <!-- input topics -->
   <!--NORMAL:  camera/depth/image_rect_raw -->
@@ -30,7 +30,7 @@
   <!-- node -->
   <node ns="$(arg quad)" pkg="global_mapper_ros" type="global_mapper_node" name="global_mapper_ros" output="screen">
       <!-- params -->
-      <rosparam command="load" if="$(arg load_params)" file="$(find global_mapper_ros)/cfg/$(arg param_file)"/>
+      <rosparam command="load" if="$(arg load_params)" file="$(find master_node)/param/$(arg param_file)"/>
 
       <!-- input remaps -->
       <remap from="~depth_image_topic" to="$(arg depth_image_topic)" />
