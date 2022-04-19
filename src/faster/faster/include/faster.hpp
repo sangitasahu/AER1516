@@ -54,7 +54,7 @@ class Faster
 {
 public:
   Faster(parameters par);
-  void replan(vec_Vecf<3>& JPS_whole_out,vec_E<Polyhedron<3>>& poly_whole_out);
+  void replan(vec_Vecf<3>& JPS_whole_out,vec_E<Polyhedron<3>>& poly_whole_out, vec_E<Ellipsoid<3>>&Elips_whole_out);
   void updateState(state data);
   void updateMap(pcl::PointCloud<pcl::PointXYZ>::Ptr pclptr_map, pcl::PointCloud<pcl::PointXYZ>::Ptr pclptr_unk);
   bool getNextGoal(state& next_goal);
