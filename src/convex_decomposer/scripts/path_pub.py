@@ -22,7 +22,7 @@ from std_msgs.msg import Header
 from nav_msgs.msg import Path
 from snapstack_msgs.msg import Goal
 import numpy as np
-
+import time
 #Instantiates objects of classes ROSDesiredPositionGenerator and PositionController
 
 class pub_path_class(object):
@@ -30,7 +30,7 @@ class pub_path_class(object):
     """Constructor to initialize the ROSControllerNode class"""
     def __init__(self):
         #self.pth = [[13.5,11.5,1],[15,12.5,1],[16,13,1]]
-        self.pth = [[10.952617645263672, 11.262423515319824, 1], [9.013447761535645, 13.011049270629883, 1]] #[[0,0,1],[1,1,1]]#[15,12.5,1],[16,13,1]]
+        self.pth = [[1,2,1],[2,2,1],[3,2,1],[4,3,1]]
 
         # Declare Publisher and Subsciber
         
@@ -64,35 +64,43 @@ class pub_path_class(object):
         header_info.frame_id = "vicon"
         pose_pack= []
 
-        if self.received_point:
+        #if self.received_point:
             # Update global goal with current clicked point value, held at target flight Z level
-            point = [self.clicked_point.pose.position.x,self.clicked_point.pose.position.y,1]
-            self.received_point = False
+            #point = [self.clicked_point.pose.position.x,self.clicked_point.pose.position.y,1]
+            #self.received_point = False
 
-            if len(self.pth)>=2:
-                self.pth = [self.pth[1]]
-                self.pth.append(point)
-            else:
-                self.pth.append(point)
-        posestd = Path()
+#            if len(self.pth)>=2:
+ #               self.pth = [self.pth[1]]
+                #self.pth.append(point)
+            #else:
+             #   self.pth.append(point)
+
+        #posestd = Path()
         print(self.pth)
         for pt in self.pth:
-            posestamped = PoseStamped()
-            posestamped.pose.position.x=pt[0]
-            posestamped.pose.position.y=pt[1]
-            posestamped.pose.position.z=pt[2]
-            posestd.poses.append(posestamped)
+            #posestamped = PoseStamped()
+            #posestamped.pose.position.x=pt[0]
+            #posestamped.pose.position.y=pt[1]
+            #posestamped.pose.position.z=pt[2]
+            #posestd.poses.append(posestamped)
+            msg = Goal()
+            msg.p.x = pt[0]
+            msg.p.y = pt[1]
+            msg.p.z = pt[2]
+            self.drone_loc_pub.publish(msg)
+            time.sleep(2)
+
         #print(posestd)
-        posestd.header = header_info
-        self.path_pub.publish(posestd)
-        loc_ = self.pth[0]
-        msg = Goal()
-        msg.p.x = self.pth[0][0]
-        msg.p.y = self.pth[0][1]
-        msg.p.z = self.pth[0][2]
-        yawmsg = np.arctan2(self.pth[1][1]-self.pth[0][1],self.pth[1][0]-self.pth[0][0])
-        msg.yaw = yawmsg
-        self.drone_loc_pub.publish(msg)
+        #posestd.header = header_info
+        #self.path_pub.publish(posestd)
+        #loc_ = self.pth[0]
+        #msg = Goal()
+        #msg.p.x = self.pth[0][0]
+        #msg.p.y = self.pth[0][1]
+        #msg.p.z = self.pth[0][2]
+        #yawmsg = np.arctan2(self.pth[1][1]-self.pth[0][1],self.pth[1][0]-self.pth[0][0])
+        #msg.yaw = yawmsg
+        #self.drone_loc_pub.publish(msg)
 if __name__ == '__main__':
     # Code to create cvx_decomp
     rospy.init_node('path_pub',disable_signals=True)
