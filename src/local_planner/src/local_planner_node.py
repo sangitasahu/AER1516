@@ -27,18 +27,22 @@ class LocalPlannerNode(object):
     def __init__(self):
 
         # Rates
-        self.replan_freq = 10
+        self.replan_freq = rospy.get_param("~lp/freq")
         self.goal_freq = 100
         self.fake_dynamics_freq = 100
 
         # Objects
         self.local_planner = LocalPlanner(self.replan_freq,self.goal_freq,self.fake_dynamics_freq)
 
+        use_JPS3D = rospy.get_param("~setup/use_jps3d")
+
         # Subscribers
         self.state_topic = '/SQ01s/state'
         self.state_sub = rospy.Subscriber(self.state_topic,State,callback=self.state_sub_callback)
-        self.glob_plan_topic = 'global_plan'
-        # self.glob_plan_topic = '/SQ01s/faster/global_plan'
+        if use_JPS3D:
+            self.glob_plan_topic = '/SQ01s/faster/global_plan'
+        else:
+            self.glob_plan_topic = 'global_plan'
         self.glob_plan_sub = rospy.Subscriber(self.glob_plan_topic,Path,callback=self.glob_plan_sub_callback)
         self.cvx_decomp_topic = 'CvxDecomp'
         self.cvx_decomp_sub = rospy.Subscriber(self.cvx_decomp_topic,CvxDecomp,callback=self.cvx_decomp_sub_callback)
