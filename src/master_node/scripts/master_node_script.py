@@ -70,7 +70,7 @@ class MasterNode(object):
         # Subscribers
         self.state_topic = '/SQ01s/state'
         self.state_sub = rospy.Subscriber(self.state_topic,State,callback=self.state_sub_callback)
-        self.glob_plan_topic = 'glob_plan'
+        self.glob_plan_topic = 'global_plan'
         # self.glob_plan_topic = '/SQ01s/faster/global_plan'
         self.glob_plan_sub = rospy.Subscriber(self.glob_plan_topic,Path,callback=self.glob_plan_sub_callback)
         self.local_plan_goal_topic = '/local_planner/local_plan_goal'
