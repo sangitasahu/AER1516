@@ -1,0 +1,6 @@
+#Params for FASTER
+
+offset_x: 0 #Offset for ellipsoids
+drone_radius: 0.42
+bbox: [2,2,1]
+angle_lim: 0.0  # in radians
