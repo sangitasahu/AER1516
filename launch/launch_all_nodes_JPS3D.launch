@@ -42,11 +42,10 @@
 	<!-- Master Node -->
 	<include file="$(find master_node)/launch/start_master_node.launch" />
 	<!--Launch rviz-->
-	<node type="rviz" name="rviz" pkg="rviz" args="-d $(find convex_decomposer)/rviz.rviz" />
+	<!--node type="rviz" name="rviz" pkg="rviz" args="-d $(find convex_decomposer)/rviz.rviz" /-->
 	
 	<!-- Data Logging -->
-	<?ignore <node name="rosbag" pkg="rosbag" type="record"
-	args="record -o /home/$(env USER)/SLOWER -e '(.*)data(.*)|(.*)local_planner(.*)' 
-	/SQ01s/goal /SQ01s/state /global_plan /SQ01s/faster/global_plan /goal_loc /move_base_simple_goal" /> ?>
-
+	<node name="rosbag" pkg="rosbag" type="record"
+	args="record -o /home/evr/SLOWER -e '(.*)data(.*)|(.*)local_planner(.*)' 
+	/SQ01s/goal /SQ01s/state /global_plan /SQ01s/faster/global_plan /goal_loc /move_base_simple_goal /cvx_decomp/replan_time /local_planner/replan_time" />
 </launch>
